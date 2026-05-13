@@ -1,7 +1,7 @@
 <mujocoinclude>
     <compiler angle="radian" inertiafromgeom="auto" inertiagrouprange="4 4"/>
     <asset>
-      <texture name="T_table" type="cube" file="../textures/wood1.png"/>
+      <texture name="T_table" type="2d" file="../textures/wood1.png"/>
 
       <material name="table_wood" texture="T_table" shininess=".3" specular="0.5"/>
       <material name="collision_blue" rgba="0.3 0.3 1.0 0.5" shininess="0" specular="0.5"/>

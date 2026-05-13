@@ -840,21 +840,21 @@ class SawyerBenchEnv(SawyerXYZEnv):
             high_density=True,
         ).numpy()[0]
 
-        # debug_grasp_reward_pad = torch_reward_utils.gripper_caging_reward(
-        #     left_pad_y,
-        #     right_pad_y,
-        #     torch.from_numpy(action[None]),
-        #     gt_tcp,
-        #     torch.from_numpy(self.init_tcp[None]),
-        #     torch.from_numpy(obj[None]),
-        #     torch.from_numpy(obj_init_pos[None]),
-        #     object_reach_radius=object_reach_radius,
-        #     obj_radius=obj_radius,
-        #     pad_success_thresh=pad_success_thresh,
-        #     xz_thresh=xz_thresh,
-        #     desired_gripper_effort=0.8,
-        #     high_density=True,
-        # ).numpy()[0]
+        debug_grasp_reward_pad = torch_reward_utils.gripper_caging_reward(
+            left_pad_y,
+            right_pad_y,
+            torch.from_numpy(action[None]),
+            gt_tcp,
+            torch.from_numpy(self.init_tcp[None]),
+            torch.from_numpy(obj[None]),
+            torch.from_numpy(obj_init_pos[None]),
+            object_reach_radius=object_reach_radius,
+            obj_radius=obj_radius,
+            pad_success_thresh=pad_success_thresh,
+            xz_thresh=xz_thresh,
+            desired_gripper_effort=0.8,
+            high_density=True,
+        ).numpy()[0]
 
         object_grasped = torch_reward_utils.gripper_caging_reward(
             left_pad_y,
