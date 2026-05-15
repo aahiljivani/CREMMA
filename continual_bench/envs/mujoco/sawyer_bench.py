@@ -495,7 +495,7 @@ class SawyerBenchEnv(SawyerXYZEnv):
         }
         rewards["block"] = block_reward
 
-        return rewards, info
+        return rewards[self.task_spec.name], info
 
     @property
     def _target_site_config(self):

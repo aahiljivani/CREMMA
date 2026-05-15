@@ -27,7 +27,7 @@ if __name__ == "__main__":
     
     obs = vec_env.reset()
     
-    for i in range(2000):
+    for i in range(6000):
         # Sample actions for all environments
         actions = np.array([vec_env.action_space.sample() for _ in range(num_envs)])
         
@@ -39,7 +39,7 @@ if __name__ == "__main__":
         # pixels = vec_env.get_images()
         # The manual `mujoco.Renderer(env.model, ...)` is avoided here 
         # since the actual environment instances live in subprocesses.
-        if i % 2000 == 0:
+        if i % 1000 == 0:
             print(f"Step {i}: done: {dones}, info: {infos}")
     
     vec_env.close()

@@ -173,7 +173,7 @@ class BaseMujocoEnv(gym.Env[np.float64, np.float32]):
 
     def close(self):
         """Close all processes like rendering contexts"""
-        raise NotImplementedError
+        return
 
     def get_body_com(self, body_name):
         """Return the cartesian position of a body frame"""
