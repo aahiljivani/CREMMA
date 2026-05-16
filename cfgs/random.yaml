@@ -1,0 +1,4 @@
+benchmark_mode: random
+shuffle_tasks: true
+single_task_name: null
+seed: 720

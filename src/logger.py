@@ -3,13 +3,13 @@ import wandb
 
 
 class ContinualLogger:
-    def __init__(self, project, config, run_name=None, enable_wandb=True):
+    def __init__(self, project, config, run_name=None, enable_wandb=True, entity=None):
         self.enable_wandb = enable_wandb
         self.global_step = 0
         self.regret_sum = 0.0
         self.run = None
         if self.enable_wandb:
-            self.run = wandb.init(project=project, name=run_name, config=config)
+            self.run = wandb.init(project=project, entity=entity, name=run_name, config=config)
             self.run.define_metric("global_step")
             self.run.define_metric("*", step_metric="global_step")
             self.run.define_metric("regret_running", summary="last")

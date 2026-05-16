@@ -1,0 +1,3 @@
+benchmark_mode: continual
+shuffle_tasks: false
+single_task_name: null

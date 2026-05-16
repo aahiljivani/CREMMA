@@ -1,0 +1,29 @@
+domain: sequential
+benchmark_mode: continual
+task_list:
+  - block
+  - button
+  - door
+  - peg
+  - window
+  - faucet
+
+shuffle_tasks: false
+seed: 0
+num_envs: 10
+vec_env_cls: SubprocVecEnv
+single_task_name: null
+policy: RandomPolicy
+
+logging:
+  project: continual-bench
+  enable_wandb: true
+  wandb_entity: jivani-aahil-university-of-ottawa
+
+train:
+  episodes_per_task: 100
+  timesteps_per_episode: 500
+
+eval:
+  eval_every_steps: 1000
+  num_eval_episodes: 10

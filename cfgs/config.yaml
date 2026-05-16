@@ -1,0 +1,16 @@
+defaults:
+  - benchmark: continual
+  - algorithm: random_policy
+  - env: continualbench
+  - logging: default
+  - _self_
+
+seed: 0
+
+train:
+  episodes_per_task: 100
+  timesteps_per_episode: 500
+
+eval:
+  eval_every_steps: 1000
+  num_eval_episodes: 10
