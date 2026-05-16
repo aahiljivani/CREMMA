@@ -1,93 +1,135 @@
 import random
+from typing import Dict, List, Tuple
+
+import hydra
 import numpy as np
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+from omegaconf import DictConfig, OmegaConf
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from continual_bench.envs import ContinualBenchEnv
 from shimmy.openai_gym_compatibility import GymV21CompatibilityV0
-import loggers as l
+
+from logger import ContinualLogger
 
 
-timesteps = 500  # by default
-episodes = 1000  # by default
-
-
-class ContinualBenchVecEnv:
-    def __init__(self, num_envs, seed=0, vec_env_cls=SubprocVecEnv, task="sequential"):
+class RandomPolicy:
+    def __init__(self, action_space, num_envs: int):
+        self.action_space = action_space
         self.num_envs = num_envs
-        self.seed = seed
-        self.vec_env_cls = vec_env_cls
-        self.task = task
 
-        self.task_sequence = ["button", "door", "window", "faucet", "peg", "block"]
-        self.task_list = self.task_sequence + ["sequential", "random"]
+    def predict(self, obs, deterministic=True):
+        return np.array([self.action_space.sample() for _ in range(self.num_envs)])
 
-    def _make_single_env(self, rank, task_name):
+
+class ContinualBenchRunner:
+    def __init__(self, cfg: DictConfig):
+        self.cfg = cfg
+        self.seed = cfg.seed
+        self.num_envs = cfg.env.num_envs
+        self.vec_env_cls = SubprocVecEnv if cfg.env.vec_env == "subproc" else DummyVecEnv
+        self.task_sequence = list(cfg.env.task_sequence)
+        self.benchmark_mode = cfg.benchmark.mode
+        self.single_task_name = cfg.benchmark.single_task_name
+
+    def _make_single_env(self, rank: int, task_name: str):
         def _init():
             env = ContinualBenchEnv(render_mode=None, seed=self.seed + rank)
             env.set_task(task_name)
             return GymV21CompatibilityV0(env=env)
         return _init
 
-    def make_envs(self):
+    def _build_training_order(self) -> List[str]:
+        if self.benchmark_mode == "sequential":
+            return list(self.task_sequence)
+        if self.benchmark_mode == "random":
+            tasks = list(self.task_sequence)
+            rng = random.Random(self.seed)
+            rng.shuffle(tasks)
+            return tasks
+        if self.benchmark_mode == "task":
+            if self.single_task_name not in self.task_sequence:
+                raise ValueError(f"single_task_name={self.single_task_name} must be one of {self.task_sequence}")
+            return [self.single_task_name]
+        raise ValueError(f"Unknown benchmark.mode: {self.benchmark_mode}")
+
+    def make_envs(self) -> Dict[str, DummyVecEnv]:
+        training_order = self._build_training_order()
         vec_envs = {}
-
-        if self.task in self.task_sequence:
-            env_fns = [self._make_single_env(i, self.task) for i in range(self.num_envs)]
-            vec_envs[self.task] = self.vec_env_cls(env_fns)
-
-        elif self.task == "sequential":
-            for task_name in self.task_sequence:
-                env_fns = [self._make_single_env(i, task_name) for i in range(self.num_envs)]
-                vec_envs[task_name] = self.vec_env_cls(env_fns)
-
-        elif self.task == "random":
-            tasks = self.task_sequence[:]
-            random.shuffle(tasks)
-            for task_name in tasks:
-                env_fns = [self._make_single_env(i, task_name) for i in range(self.num_envs)]
-                vec_envs[task_name] = self.vec_env_cls(env_fns)
-
-        else:
-            raise ValueError(f"Task {self.task} not found. Available tasks: {self.task_list}")
-
+        for task_name in training_order:
+            env_fns = [self._make_single_env(i, task_name) for i in range(self.num_envs)]
+            vec_envs[task_name] = self.vec_env_cls(env_fns)
         return vec_envs
 
-    def train(self, episodes=1000, timesteps=500):
-        vec_envs = self.make_envs()
-        success_buffer = []
-        all_task_performance = []
+    def evaluate_seen_tasks(self, policy, seen_tasks: List[str]) -> Dict[str, float]:
+        task_scores = {}
+        for task_name in seen_tasks:
+            eval_env = DummyVecEnv([self._make_single_env(0, task_name)])
+            eval_policy = RandomPolicy(eval_env.action_space, 1)
+            episode_scores = []
+            for _ in range(self.cfg.eval.num_eval_episodes):
+                obs = eval_env.reset()
+                done = [False]
+                step_scores = []
+                while not done[0]:
+                    action = eval_policy.predict(obs, deterministic=True)
+                    obs, rewards, done, infos = eval_env.step(action)
+                    step_scores.append(float(infos[0][task_name]["success"]))
+                episode_scores.append(float(np.mean(step_scores)) if step_scores else 0.0)
+            eval_env.close()
+            task_scores[task_name] = float(np.mean(episode_scores)) if episode_scores else 0.0
+        return task_scores
 
-        if self.task in self.task_sequence:
-            vec_env = vec_envs[self.task]
-            print(f"Training on task: {self.task}")
-            for ep in range(episodes):
+    def train(self):
+        vec_envs = self.make_envs()
+        training_order = list(vec_envs.keys())
+        first_env = vec_envs[training_order[0]]
+        policy = RandomPolicy(first_env.action_space, self.num_envs)
+
+        run_name = f"{self.cfg.algorithm.name}_{self.cfg.benchmark.mode}_{self.cfg.env.num_envs}env_seed{self.seed}"
+        logger = ContinualLogger(
+            project=self.cfg.logging.project,
+            run_name=run_name,
+            enable_wandb=self.cfg.logging.enable_wandb,
+            config=OmegaConf.to_container(self.cfg, resolve=True),
+        )
+
+        seen_tasks = []
+        final_scores = {}
+
+        for task_idx, task_name in enumerate(training_order):
+            seen_tasks.append(task_name)
+            vec_env = vec_envs[task_name]
+
+            for ep in range(self.cfg.train.episodes_per_task):
                 obs = vec_env.reset()
-                for step in range(timesteps):
-                    actions = np.array([vec_env.action_space.sample() for _ in range(self.num_envs)])
+                for t in range(self.cfg.train.timesteps_per_episode):
+                    actions = policy.predict(obs, deterministic=False)
                     obs, rewards, dones, infos = vec_env.step(actions)
-                    successes = np.array([info[self.task]['success'] for info in infos])
-                    success_buffer.append(l.step_success(successes))
-                task_performance = l.task_performance(success_buffer)
-                success_buffer.clear()
-                print(f"ep={ep} | Task {self.task} performance: {task_performance}")
+                    successes = np.array([float(info[task_name]["success"]) for info in infos], dtype=np.float32)
+                    logger.update_online(
+                        task_name=task_name,
+                        task_idx=task_idx,
+                        episode_idx=ep,
+                        timestep_in_episode=t,
+                        successes=successes,
+                    )
+
+                    if logger.global_step % self.cfg.eval.eval_every_steps == 0:
+                        task_scores = self.evaluate_seen_tasks(policy, seen_tasks)
+                        logger.log_evaluation(seen_tasks, task_scores)
+
             vec_env.close()
 
-        elif self.task in ["sequential", "random"]:
-            for task_name, vec_env in vec_envs.items():
-                print(f"Training on task: {task_name}")
-                for ep in range(episodes):
-                    obs = vec_env.reset()
-                    for step in range(timesteps):
-                        actions = np.array([vec_env.action_space.sample() for _ in range(self.num_envs)])
-                        obs, rewards, dones, infos = vec_env.step(actions)
-                        successes = np.array([info[task_name]['success'] for info in infos])
-                        success_buffer.append(l.step_success(successes))
-                    task_performance = l.task_performance(success_buffer)
-                    success_buffer.clear()
-                    print(f"ep={ep} | Task {task_name} performance: {task_performance}")
-                all_task_performance.append(task_performance)
-                vec_env.close()
+        final_scores = self.evaluate_seen_tasks(policy, seen_tasks)
+        logger.log_evaluation(seen_tasks, final_scores)
+        logger.finish(final_scores)
+
+
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: DictConfig):
+    print(OmegaConf.to_yaml(cfg))
+    runner = ContinualBenchRunner(cfg)
+    runner.train()
 
 
 if __name__ == "__main__":
-    vec_env = ContinualBenchVecEnv(num_envs=1, task="door")
-    vec_env.train(episodes=1000, timesteps=100)
+    main()
