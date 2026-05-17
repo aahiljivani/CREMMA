@@ -4,7 +4,7 @@
 
 **This repository extends the public ContinualBench benchmark from sail-sg for additional benchmarking infrastructure, training workflows, and comparative evaluation of continual RL algorithms.**
 
-**Original benchmark:
+**Original benchmark:**
 - Paper: Continual Reinforcement Learning by Planning with Online World Models
 - Repo: https://github.com/sail-sg/ContinualBench
 
