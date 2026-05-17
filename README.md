@@ -48,7 +48,7 @@ Continual Bench provides a single MuJoCo environment containing six distinct man
 ## Installation
 
 ```bash
-git clone https://github.com/aahiljivani/ContinualBench.git && cd ContinualBench
+git clone https://github.com/aahiljivani/CREMMA.git && cd CREMMA
 pip install -e .
 ```
 
