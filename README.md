@@ -3,10 +3,10 @@
 # Continual RL Evaluation of Model Based and Model Free Algorithms (CREMMA)
 
 **This repository extends the public ContinualBench benchmark from sail-sg for additional sequential, and task benchmarking with parallel and vectorized environment training infrastructure, training workflows, and comparative evaluation of continual RL algorithms. The repo consists of benchmark algorithms:
-# Model-Free Continual RL Agents:**
+## Model-Free Continual RL Agents:**
 - PackNet
 - CompoNet
-# Model-Based RL Continual RL Agents
+## Model-Based RL Continual RL Agents
 - DRAGO
 - HyperCRL
 
