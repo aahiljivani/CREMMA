@@ -2,7 +2,8 @@
 
 # Continual RL Evaluation of Model Based and Model Free Algorithms (CREMMA)
 
-**This repository extends the public ContinualBench benchmark from sail-sg for additional sequential, and task benchmarking with parallel and vectorized environment training infrastructure, training workflows, and comparative evaluation of continual RL algorithms. The repo consists of benchmark algorithms:
+**This repository extends the public ContinualBench benchmark from sail-sg for additional sequential, and task benchmarking with parallel and vectorized training using SubProcVecEnv in SB3 training.  The repo's aim is to compare and contrast MF vs MB CRL training and creating a platform for CRL training that is faster for future testing of novel CRL algorithms.
+Currently, this repo consists of the following algorithms:**
 ## Non-CRL Agents
 - **SAC**
 - **PPO**
