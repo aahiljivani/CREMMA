@@ -81,6 +81,8 @@ class ContinualBenchVecEnv:
     def _build_policy(self, action_space, num_envs: int): # building SAC and PPO policies soon.
         if self.cfg.policy == "RandomPolicy":
             return RandomPolicy(action_space, num_envs)
+        if self.cfg.policy == "SACPolicy":
+            return SACPolicy(action_space, num_envs)
         raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
     def evaluate_seen_tasks(self, seen_tasks: List[str]) -> Dict[str, float]:
@@ -111,10 +113,12 @@ class ContinualBenchVecEnv:
     def train(self):
         vec_envs = self.make_envs()
         training_order = list(vec_envs.keys())
-
+        # we need to change this, where we have to feed in every tasks vec env not just the first task
         first_env = vec_envs[training_order[0]]
+        # building the policy will come from intitializing the agent first. i.e. calling SAC.reset()
         policy = self._build_policy(first_env.action_space, num_envs=self.num_envs)
 
+        # logging CRL specific metrics here.
         run_name = f"{self.cfg.policy}_{self.cfg.benchmark_mode}_{self.num_envs}env_seed{self.seed}"
         logger = ContinualLogger(
             project=self.cfg.logging.project,
@@ -124,19 +128,23 @@ class ContinualBenchVecEnv:
             config=OmegaConf.to_container(self.cfg, resolve=True),
         )
 
+        # defining which tasks we have already seen
         seen_tasks = []
-
+        # for the task index and task name
         for task_idx, task_name in enumerate(training_order):
             seen_tasks.append(task_name)
             vec_env = vec_envs[task_name]
+            # start with the vectorized env of task
 
             for ep in range(int(self.cfg.train.episodes_per_task)):
-                obs = vec_env.reset()
+                obs = vec_env.reset() # reset the vec env
 
                 for t in range(int(self.cfg.train.timesteps_per_episode)):
+                    # we can specify updates here and task specific buffer stuff. like if policy is sac warmup buffer and append to buffer
                     actions = policy.predict(obs, deterministic=False)
                     obs, rewards, dones, infos = vec_env.step(actions)
 
+                    # more logging of CRL metrics
                     successes = np.array(
                         [float(info[task_name]["success"]) for info in infos],
                         dtype=np.float32,
@@ -149,13 +157,13 @@ class ContinualBenchVecEnv:
                         timestep_in_episode=t,
                         successes=successes,
                     )
-
+                    # here is where we evaluate all the seen tasks
                     if logger.global_step % int(self.cfg.eval.eval_every_steps) == 0:
                         task_scores = self.evaluate_seen_tasks(seen_tasks)
                         logger.log_evaluation(seen_tasks, task_scores)
 
             vec_env.close()
-
+        # finish eval and logging
         final_scores = self.evaluate_seen_tasks(seen_tasks)
         logger.log_evaluation(seen_tasks, final_scores)
         logger.finish(final_scores)

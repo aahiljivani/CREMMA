@@ -6,3 +6,9 @@ class RandomPolicy:
 
     def predict(self, obs, deterministic=True):
         return np.array([self.action_space.sample() for _ in range(self.num_envs)])
+
+    def save(self):
+        pass
+
+    def load(self):
+        pass
