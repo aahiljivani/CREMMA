@@ -71,3 +71,6 @@ class ContinualLogger:
         for task_name, score in final_task_scores.items():
             self.run.summary[f"final_eval_success_{task_name}"] = float(score)
         self.run.finish()
+    
+    def sac_log(self):
+        pass
