@@ -53,6 +53,14 @@ class Actor(nn.Module):
 
         return mean, log_std
 
+class SAC:
+    def __init__(self, cfg):
+        self.actor = Actor(cfg.env)
+        self.qf1 = SoftQNetwork(env)
+        self.qf2 = SoftQNetwork(env)
+        self.qf1_target = SoftQNetwork(env)
+        self.qf2_target = SoftQNetwork(env)
+
     def predict(self, x, deterministic = False):
         mean, log_std = self(x)
         std = log_std.exp()
@@ -71,3 +79,38 @@ class Actor(nn.Module):
             log_prob = log_prob.sum(1, keepdim=True)
             mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
+
+    def reset(self):
+        # start/boot all networks and 
+        actor = Actor(envs).to(device)
+        qf1 = SoftQNetwork(envs).to(device)
+        qf2 = SoftQNetwork(envs).to(device)
+        qf1_target = SoftQNetwork(envs).to(device)
+        qf2_target = SoftQNetwork(envs).to(device)
+        qf1_target.load_state_dict(qf1.state_dict())
+        qf2_target.load_state_dict(qf2.state_dict())
+        q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr)
+        actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
+
+        # Automatic entropy tuning
+        if cfg.autotune:
+            target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
+            log_alpha = torch.zeros(1, requires_grad=True, device=device)
+            alpha = log_alpha.exp().item()
+            a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
+        else:
+            alpha = args.alpha
+
+        envs.single_observation_space.dtype = np.float32
+        rb = ReplayBuffer(
+            args.buffer_size,
+            envs.single_observation_space,
+            envs.single_action_space,
+            device,
+            n_envs=args.num_envs,
+            handle_timeout_termination=False,
+        )
+    
+
+    def update(self):
+        pass
