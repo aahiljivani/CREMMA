@@ -108,3 +108,8 @@ ENV/
 
 # Ruff
 .ruff_cache
+
+.idea/
+__pycache__/
+*.pyc
+.env
