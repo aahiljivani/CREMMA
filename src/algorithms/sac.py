@@ -58,7 +58,7 @@ class Actor(nn.Module):
         std = log_std.exp()
         if deterministic:
             mean_action = torch.tanh(mean) * self.action_scale + self.action_bias
-            return mean_action
+            return mean_action, None, None # consistent tuple shape
         else:
 
             normal = torch.distributions.Normal(mean, std)

@@ -1,5 +1,6 @@
 import numpy as np
 import wandb
+import time
 
 
 class ContinualLogger:
@@ -8,6 +9,7 @@ class ContinualLogger:
         self.global_step = 0
         self.regret_sum = 0.0
         self.run = None
+        self.start_time = time.time()
         if self.enable_wandb:
             self.run = wandb.init(project=project, entity=entity, name=run_name, config=config)
             self.run.define_metric("global_step")
