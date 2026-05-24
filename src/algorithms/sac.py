@@ -96,16 +96,19 @@ class SAC(Actor, SoftQNetwork):
         self.envs = envs
         self.policy_lr = cfg.policy_lr
         self.q_lr = cfg.q_lr
+        self.actor = Actor(envs).to(self.device)
+        self.qf1 = SoftQNetwork(envs).to(self.device)
+
+        self.qf2 = SoftQNetwork(self.envs).to(self.device)
+        self.qf1_target = SoftQNetwork(self.envs).to(self.device)
+        self.qf2_target = SoftQNetwork(self.envs).to(self.device)
+        self.qf1_target.load_state_dict(qf1.state_dict())
+        self.qf2_target.load_state_dict(qf2.state_dict())
+        self.q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=self.q_lr)
+        self.actor_optimizer = optim.Adam(list(actor.parameters()), lr=self.policy_lr)
 
     def reset(self):
-        actor = Actor(envs).to(self.device)
-        qf1 = SoftQNetwork(envs).to(self.device)
-
-        qf2 = SoftQNetwork(self.envs).to(self.device)
-        qf1_target = SoftQNetwork(self.envs).to(self.device)
-        qf2_target = SoftQNetwork(self.envs).to(self.device)
-        qf1_target.load_state_dict(qf1.state_dict())
-        qf2_target.load_state_dict(qf2.state_dict())
-        q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=self.q_lr)
-        actor_optimizer = optim.Adam(list(actor.parameters()), lr=self.policy_lr)
         return self
+
+    def predict(self):
+        return self.actor.get_action(self.envs.reset())
