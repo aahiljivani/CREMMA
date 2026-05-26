@@ -1,3 +1,4 @@
+from nt import replace
 import random
 from pathlib import Path
 from typing import Dict, List
@@ -11,6 +12,8 @@ from shimmy.openai_gym_compatibility import GymV21CompatibilityV0
 from .cfg import parse_cfg
 from .logger import ContinualLogger
 from src.algorithms import RandomPolicy
+import torch
+from cleanrl_utils.buffers import ReplayBuffer
 
 
 class ContinualBenchVecEnv:
@@ -22,6 +25,10 @@ class ContinualBenchVecEnv:
         self.benchmark_mode = str(cfg.benchmark_mode)
         self.single_task_name = cfg.get("single_task_name", None)
         self.vec_env_cls = self._resolve_vec_env_cls(cfg.vec_env_cls)
+        self.train_episodes_per_task = int(cfg.train.episodes_per_task)
+        self.train_timesteps_per_episode = int(cfg.train.timesteps_per_episode)
+        self.eval.eval_every_steps = int(cfg.eval.eval_every_steps)
+        self.eval.num_eval_episodes = int(cfg.eval.num_eval_episodes)
 
     @staticmethod
     def _resolve_vec_env_cls(vec_env_name: str):
@@ -111,12 +118,31 @@ class ContinualBenchVecEnv:
         return task_scores
 
     def train(self):
+        # seeding
+        random.seed(self.cfg.seed)
+        np.random.seed(self.cfg.seed)
+        torch.manual_seed(self.cfg.seed)
+        torch.backends.cudnn.deterministic = self.cfg.torch_deterministic
+        # device
+        self.cfg.device = torch.device("cuda" if torch.cuda.is_available() and self.cfg.cuda else "cpu")
+        print(f"Using device: {self.cfg.device}")
+        # create the vectorized environments
         vec_envs = self.make_envs()
         training_order = list(vec_envs.keys())
         # we need to change this, where we have to feed in every tasks vec env not just the first task
         first_env = vec_envs[training_order[0]]
         # building the policy will come from intitializing the agent first. i.e. calling SAC.reset()
         policy = self._build_policy(first_env.action_space, num_envs=self.num_envs)
+        agent = policy.reset()
+        if self.cfg.replay_buffer:
+            rb = ReplayBuffer(
+                self.cfg.buffer_size,
+                first_env.observation_space,
+                first_env.action_space,
+                self.cfg.device,
+                n_envs=self.num_envs,
+                handle_timeout_termination=False,
+            )
 
         # logging CRL specific metrics here.
         run_name = f"{self.cfg.policy}_{self.cfg.benchmark_mode}_{self.num_envs}env_seed{self.seed}"
@@ -136,12 +162,19 @@ class ContinualBenchVecEnv:
             vec_env = vec_envs[task_name]
             # start with the vectorized env of task
 
-            for ep in range(int(self.cfg.train.episodes_per_task)):
+            for ep in range(int(self.train_episodes_per_task)):
+                global_step = 0
                 obs = vec_env.reset() # reset the vec env
 
-                for t in range(int(self.cfg.train.timesteps_per_episode)):
+                for t in range(int(self.train_timesteps_per_episode)):
+                    global_step += 1
+                    if global_step < self.cfg.learning_starts:
+                        actions = np.array([vec_env.single_action_space.sample() for _ in range(vec_env.num_envs)])
+                    else:
                     # we can specify updates here and task specific buffer stuff. like if policy is sac warmup buffer and append to buffer
-                    actions = policy.predict(obs, deterministic=False)
+                    # HERE
+                        actions = agent.predict(obs, deterministic=False)
+                    
                     obs, rewards, dones, infos = vec_env.step(actions)
 
                     # more logging of CRL metrics

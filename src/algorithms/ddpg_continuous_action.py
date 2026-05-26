@@ -104,8 +104,8 @@ class Actor(nn.Module):
         super().__init__()
         self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), self.hidden_size)
         self.fc2 = nn.Linear(self.hidden_size, self.hidden_size)
-        self.fc_mu = nn.Linear(hidden_size, np.prod(env.single_action_space.shape))
-        # action rescaling
+        self.fc_mu = nn.Linear(self.hidden_size, np.prod(env.single_action_space.shape)) # deterministic policy
+        # action rescaling so we can clip the action to the bounds
         self.register_buffer(
             "action_scale", torch.tensor((env.action_space.high - env.action_space.low) / 2.0, dtype=torch.float32)
         )
