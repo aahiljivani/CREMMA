@@ -1,29 +1,29 @@
-import os
-import random
 import time
-from dataclasses import dataclass
-from tkinter import HIDDEN
-from turtle import hideturtle
 
-import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import tyro
-from torch.utils.tensorboard import SummaryWriter
-from cleanrl_utils.evals.ddpg_eval import evaluate
 
-from cleanrl_utils.buffers import ReplayBuffer
-from logger import ContinualLogger, ddpg_log
+
+def _single_observation_space(env):
+    single_space = getattr(env, "single_observation_space", None)
+    return single_space if single_space is not None else env.observation_space
+
+
+def _single_action_space(env):
+    single_space = getattr(env, "single_action_space", None)
+    return single_space if single_space is not None else env.action_space
 
 # ALGO LOGIC: initialize agent here:
 class QNetwork(nn.Module):
     def __init__(self, env, hidden_size):
         self.hidden_size = hidden_size
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), hidden_size)
+        observation_space = _single_observation_space(env)
+        action_space = _single_action_space(env)
+        self.fc1 = nn.Linear(np.array(observation_space.shape).prod() + np.prod(action_space.shape), hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, 1)
 
@@ -39,15 +39,17 @@ class Actor(nn.Module):
     def __init__(self, env, hidden_size):
         self.hidden_size = hidden_size
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), self.hidden_size)
+        observation_space = _single_observation_space(env)
+        action_space = _single_action_space(env)
+        self.fc1 = nn.Linear(np.array(observation_space.shape).prod(), self.hidden_size)
         self.fc2 = nn.Linear(self.hidden_size, self.hidden_size)
-        self.fc_mu = nn.Linear(self.hidden_size, np.prod(env.single_action_space.shape)) # deterministic policy
+        self.fc_mu = nn.Linear(self.hidden_size, np.prod(action_space.shape)) # deterministic policy
         # action rescaling so we can clip the action to the bounds
         self.register_buffer(
-            "action_scale", torch.tensor((env.action_space.high - env.action_space.low) / 2.0, dtype=torch.float32)
+            "action_scale", torch.tensor((action_space.high - action_space.low) / 2.0, dtype=torch.float32)
         )
         self.register_buffer(
-            "action_bias", torch.tensor((env.action_space.high + env.action_space.low) / 2.0, dtype=torch.float32)
+            "action_bias", torch.tensor((action_space.high + action_space.low) / 2.0, dtype=torch.float32)
         )
 
     def forward(self, x):
@@ -57,7 +59,7 @@ class Actor(nn.Module):
         return x * self.action_scale + self.action_bias
 
 
-class DDPG(BaseAgent):
+class DDPG:
     def __init__(self, cfg, env):
         self.cfg = cfg
         self.env = env
@@ -70,10 +72,10 @@ class DDPG(BaseAgent):
         self.buffer_size = cfg.buffer_size
         self.learning_starts = cfg.learning_starts
         self.policy_frequency = cfg.policy_frequency
-        
+        self.start_time = time.time()
 
 
-    def reset(self, Actor, QNetwork):
+    def reset(self):
         self.actor = Actor(self.env, self.hidden_size).to(self.device)
         self.qf1 = QNetwork(self.env, self.hidden_size).to(self.device)
         self.qf1_target = QNetwork(self.env, self.hidden_size).to(self.device)
@@ -84,18 +86,23 @@ class DDPG(BaseAgent):
         self.actor_optimizer = optim.Adam(list(self.actor.parameters()), lr=self.learning_rate)
         return self
     
-    def predict(self, obs):
+    def predict(self, obs, deterministic=True):
         with torch.no_grad():
                 actions = self.actor(torch.Tensor(obs).to(self.device))
                 actions += torch.normal(0, self.actor.action_scale * self.cfg.exploration_noise)
-                actions = actions.cpu().numpy().clip(self.env.action_space.low, self.env.action_space.high)
+                action_space = _single_action_space(self.env)
+                actions = actions.cpu().numpy().clip(action_space.low, action_space.high)
                 return actions
 
     def update(self, data, global_step):
+        actor_loss = None
         with torch.no_grad():
             next_state_actions = self.target_actor(data.next_observations)
             qf1_next_target = self.qf1_target(data.next_observations, next_state_actions)
-            next_q_value = data.rewards.flatten() + (1 - data.terminated.flatten()) * self.gamma * (qf1_next_target).view(-1)
+            terminated = getattr(data, "terminated", None)
+            if terminated is None:
+                terminated = data.dones
+            next_q_value = data.rewards.flatten() + (1 - terminated.flatten()) * self.gamma * (qf1_next_target).view(-1)
 
         qf1_a_values = self.qf1(data.observations, data.actions).view(-1)
         qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
@@ -105,46 +112,32 @@ class DDPG(BaseAgent):
         qf1_loss.backward()
         self.q_optimizer.step()
 
-        if global_step % self.cfg.policy_frequency == 0:
-                actor_loss = -self.qf1(data.observations, self.actor(data.observations)).mean()
-                self.actor_optimizer.zero_grad()
-                actor_loss.backward()
-                self.actor_optimizer.step()
+        if global_step % self.policy_frequency == 0:
+            actor_loss = -self.qf1(data.observations, self.actor(data.observations)).mean()
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
 
-                # update the target network
-                for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
-                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-                for param, target_param in zip(self.qf1.parameters(), self.qf1_target.parameters()):
-                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-        if global_step % 100 == 0:
-            self.ddpg_log(global_step, qf1_a_values, qf1_loss, actor_loss)
-        return self
+            # update the target network
+            for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            for param, target_param in zip(self.qf1.parameters(), self.qf1_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+        if global_step % 100 != 0:
+            return {}
+
+        elapsed_time = max(time.time() - self.start_time, 1e-9)
+        metrics = {
+            "losses/qf1_values": qf1_a_values.mean().item(),
+            "losses/qf1_loss": qf1_loss.item(),
+            "losses/actor_loss": actor_loss.item() if actor_loss is not None else None,
+            "charts/SPS": int(global_step / elapsed_time),
+        }
+        return metrics
 
     def save(self, path):
         model_path = f"{path}/{self.cfg.exp_name}.cleanrl_model"
-        torch.save((actor.state_dict(), qf1.state_dict()), model_path)
+        torch.save((self.actor.state_dict(), self.qf1.state_dict()), model_path)
         print(f"model saved to {model_path}")
-        
-
-        episodic_returns = evaluate(
-            model_path,
-            self.env,
-            self.cfg.env_id,
-            eval_episodes=10,
-            run_name=f"{self.cfg.env_id}-{self.cfg.exp_name}-eval",
-            Model=(self.actor, self.qf1),
-            device=self.device,
-            exploration_noise=self.cfg.exploration_noise,
-        )
-        for idx, episodic_return in enumerate(episodic_returns):
-            writer.add_scalar("eval/episodic_return", episodic_return, idx)
-
-
-
-    def ddpg_log(self,global_step, qf1_a_values, qf1_loss, actor_loss):
-        writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
-        writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-        writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
-        print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
-
+        return model_path

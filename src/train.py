@@ -1,4 +1,3 @@
-from nt import replace
 import random
 from pathlib import Path
 from typing import Dict, List
@@ -11,9 +10,9 @@ from shimmy.openai_gym_compatibility import GymV21CompatibilityV0
 
 from .cfg import parse_cfg
 from .logger import ContinualLogger
-from src.algorithms import RandomPolicy
+from src.algorithms import DDPG, RandomPolicy, SAC
 import torch
-from cleanrl_utils.buffers import ReplayBuffer
+from stable_baselines3.common.buffers import ReplayBuffer
 
 
 
@@ -28,8 +27,8 @@ class ContinualBenchVecEnv:
         self.vec_env_cls = self._resolve_vec_env_cls(cfg.vec_env_cls)
         self.train_episodes_per_task = int(cfg.train.episodes_per_task)
         self.train_timesteps_per_episode = int(cfg.train.timesteps_per_episode)
-        self.eval.eval_every_steps = int(cfg.eval.eval_every_steps)
-        self.eval.num_eval_episodes = int(cfg.eval.num_eval_episodes)
+        self.eval_every_steps = int(cfg.eval.eval_every_steps)
+        self.num_eval_episodes = int(cfg.eval.num_eval_episodes)
 
     @staticmethod
     def _resolve_vec_env_cls(vec_env_name: str):
@@ -44,9 +43,12 @@ class ContinualBenchVecEnv:
         creates a single environment for task_name with unique
         seed and gymnasium compatibility wrapper
         '''
+        seed = self.seed + rank
+        task = task_name
+
         def _init():
-            env = ContinualBenchEnv(render_mode=None, seed=self.seed + rank)
-            env.set_task(task_name)
+            env = ContinualBenchEnv(render_mode=None, seed=seed)
+            env.set_task(task)
             return GymV21CompatibilityV0(env=env)
         return _init
 
@@ -86,11 +88,13 @@ class ContinualBenchVecEnv:
             vec_envs[task_name] = self.vec_env_cls(env_fns, start_method="spawn")
         return vec_envs
 
-    def _build_policy(self, action_space, num_envs: int): # building SAC and PPO policies soon.
+    def _build_policy(self, env, num_envs: int): # building SAC and PPO policies soon.
         if self.cfg.policy == "RandomPolicy":
-            return RandomPolicy(action_space, num_envs)
-        if self.cfg.policy == "SACPolicy":
-            return SACPolicy(action_space, num_envs)
+            return RandomPolicy(env.action_space, num_envs)
+        if self.cfg.policy == "DDPG":
+            return DDPG(self.cfg, env).reset()
+        if self.cfg.policy == "SAC":
+            return SAC(self.cfg, env).reset()
         raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
     def evaluate_seen_tasks(self, seen_tasks: List[str]) -> Dict[str, float]:
@@ -98,7 +102,7 @@ class ContinualBenchVecEnv:
 
         for task_name in seen_tasks:
             eval_env = DummyVecEnv([self._make_single_env(0, task_name)])
-            eval_policy = self._build_policy(eval_env.action_space, num_envs=1)
+            eval_policy = self._build_policy(eval_env, num_envs=1)
             episode_scores = []
 
             for _ in range(int(self.cfg.eval.num_eval_episodes)):
@@ -109,7 +113,7 @@ class ContinualBenchVecEnv:
                 while not done[0]:
                     actions = eval_policy.predict(obs, deterministic=True)
                     obs, rewards, done, infos = eval_env.step(actions)
-                    step_scores.append(float(infos[0][task_name]["success"]))
+                    step_scores.append(float(infos[0]["success"]))
 
                 episode_scores.append(float(np.mean(step_scores)) if step_scores else 0.0)
 
@@ -125,7 +129,7 @@ class ContinualBenchVecEnv:
         torch.manual_seed(self.cfg.seed)
         torch.backends.cudnn.deterministic = self.cfg.torch_deterministic
         # device
-        self.cfg.device = torch.device("cuda" if torch.cuda.is_available() and self.cfg.cuda else "cpu")
+        self.cfg.device = "cuda" if torch.cuda.is_available() and self.cfg.cuda else "cpu"
         print(f"Using device: {self.cfg.device}")
         # create the vectorized environments
         vec_envs = self.make_envs()
@@ -133,9 +137,10 @@ class ContinualBenchVecEnv:
         # we need to change this, where we have to feed in every tasks vec env not just the first task
         first_env = vec_envs[training_order[0]]
         # building the policy will come from intitializing the agent first. i.e. calling SAC.reset()
-        policy = self._build_policy(first_env.action_space, num_envs=self.num_envs)
-        agent = policy.reset()
-        if self.cfg.replay_buffer:
+        agent = self._build_policy(first_env, num_envs=self.num_envs)
+        replay_buffer_enabled = bool(self.cfg.get("replay_buffer", False))
+        learning_starts = int(self.cfg.get("learning_starts", 0))
+        if replay_buffer_enabled:
             rb = ReplayBuffer(
                 self.cfg.buffer_size,
                 first_env.observation_space,
@@ -164,49 +169,38 @@ class ContinualBenchVecEnv:
             # start with the vectorized env of task, this is where training starts per task level
 
             for ep in range(int(self.train_episodes_per_task)):
-                global_step = 0
                 obs = vec_env.reset() # reset the vec env
+                episode_returns = np.zeros(vec_env.num_envs, dtype=np.float32)
+                episode_lengths = np.zeros(vec_env.num_envs, dtype=np.int32)
 
                 for t in range(int(self.train_timesteps_per_episode)):
-                    global_step += 1
-                    if global_step < self.cfg.learning_starts:
-                        actions = np.array([vec_env.single_action_space.sample() for _ in range(vec_env.num_envs)])
+                    if logger.global_step < learning_starts:
+                        action_space = getattr(vec_env, "single_action_space", None)
+                        if action_space is None:
+                            action_space = vec_env.action_space
+                        actions = np.array([action_space.sample() for _ in range(vec_env.num_envs)])
                     else:
                     # we can specify updates here and task specific buffer stuff. like if policy is sac warmup buffer and append to buffer
                     # HERE
                         actions = agent.predict(obs)
-                    truncated = np.array([False] * vec_env.num_envs)
-                    terminated = np.array([False] * vec_env.num_envs)
                     next_obs, rewards, dones, infos = vec_env.step(actions)
-                    for idx, info in enumerate(infos):
-                        if info["success"] and dones[idx]:
-                            terminated[idx] = True
-
-                        elif dones[idx] and not info["success"]:
-                            truncated[idx] = True
+                    episode_returns += rewards
+                    episode_lengths += 1
+                    successes = np.array(
+                        [float(info["success"]) for info in infos],
+                        dtype=np.float32,
+                    )
+                    terminated = np.logical_and(dones, successes.astype(bool))
                     # replay buffer update of next obs when done is true
                     real_next_obs = next_obs.copy()
                     for idx, done in enumerate(dones):
                         if done:
-                            real_next_obs[idx] = infos["final_observation"][idx]
-                    if self.cfg.replay_buffer:
+                            real_next_obs[idx] = infos[idx]["terminal_observation"]
+                    if replay_buffer_enabled:
                         rb.add(obs, real_next_obs, actions, rewards, terminated, infos)
 
                     obs = next_obs
-                    if global_step > self.cfg.learning_starts:
-                        data = rb.sample(self.cfg.batch_size)
-                        policy.update(data, global_step)
-                    if global_step % 100 == 0:
-                        ddpg_log(global_step)
-
-                    
-
                     # more logging of CRL metrics
-                    successes = np.array(
-                        [float(info[task_name]["success"]) for info in infos],
-                        dtype=np.float32,
-                    )
-
                     logger.update_online(
                         task_name=task_name,
                         task_idx=task_idx,
@@ -214,6 +208,27 @@ class ContinualBenchVecEnv:
                         timestep_in_episode=t,
                         successes=successes,
                     )
+
+                    for idx, done in enumerate(dones):
+                        if not done:
+                            continue
+                        logger.log_metrics(
+                            {
+                                "charts/episodic_return": float(episode_returns[idx]),
+                                "charts/episodic_length": int(episode_lengths[idx]),
+                            }
+                        )
+                        episode_returns[idx] = 0.0
+                        episode_lengths[idx] = 0
+
+                    if (
+                        replay_buffer_enabled
+                        and logger.global_step > learning_starts
+                        and hasattr(agent, "update")
+                    ):
+                        data = rb.sample(self.cfg.batch_size)
+                        algorithm_metrics = agent.update(data, logger.global_step)
+                        logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
                     # here is where we evaluate all the seen tasks
                     if logger.global_step % int(self.cfg.eval.eval_every_steps) == 0:
                         task_scores = self.evaluate_seen_tasks(seen_tasks)

@@ -455,8 +455,7 @@ class SawyerXYZEnv(SawyerMocapBase, EzPickle):
             return (
                 self._last_stable_obs,  # observation just before going unstable
                 0.0,  # reward (penalize for causing instability)
-                False,
-                False,  # termination flag always False
+                False,  # done flag always False
                 {  # info
                     "success": False,
                     "near_object": 0.0,

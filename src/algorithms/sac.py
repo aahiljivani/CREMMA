@@ -12,7 +12,7 @@ import torch.optim as optim
 import tyro
 from torch.utils.tensorboard import SummaryWriter
 
-from cleanrl_utils.buffers import ReplayBuffer
+from stable_baselines3.common.buffers import ReplayBuffer
 
 from continual_bench import envs
 

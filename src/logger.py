@@ -40,6 +40,25 @@ class ContinualLogger:
             self.run.log(payload)
         return online_success, float(regret_running)
 
+    def log_metrics(self, metrics, step=None, prefix=None):
+        if not metrics:
+            return {}
+
+        global_step = self.global_step if step is None else int(step)
+        payload = {"global_step": global_step}
+        for key, value in metrics.items():
+            if value is None:
+                continue
+            metric_key = f"{prefix}/{key}" if prefix else key
+            payload[metric_key] = value
+
+        if len(payload) > 1 and self.run is not None:
+            self.run.log(payload)
+        return payload
+
+    def log_algorithm_metrics(self, metrics, step=None):
+        return self.log_metrics(metrics, step=step)
+
     @staticmethod
     def average_performance(task_scores):
         if not task_scores:
@@ -71,13 +90,3 @@ class ContinualLogger:
         for task_name, score in final_task_scores.items():
             self.run.summary[f"final_eval_success_{task_name}"] = float(score)
         self.run.finish()
-    
-    def sac_log(self):
-        pass
-
-def ddpg_log(self):
-    writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
-    writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-    writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
-    print("SPS:", int(global_step / (time.time() - start_time)))
-    writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
