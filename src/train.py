@@ -175,9 +175,7 @@ class ContinualBenchVecEnv:
 
                 for t in range(int(self.train_timesteps_per_episode)):
                     if logger.global_step < learning_starts:
-                        action_space = getattr(vec_env, "single_action_space", None)
-                        if action_space is None:
-                            action_space = vec_env.action_space
+                        action_space = vec_env.action_space
                         actions = np.array([action_space.sample() for _ in range(vec_env.num_envs)])
                     else:
                     # we can specify updates here and task specific buffer stuff. like if policy is sac warmup buffer and append to buffer
