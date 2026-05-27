@@ -469,19 +469,20 @@ class SawyerXYZEnv(SawyerMocapBase, EzPickle):
             )
 
         self._last_stable_obs = self._get_obs()
-
-        self._last_stable_obs = np.clip(
-            self._last_stable_obs,
-            a_max=self.sawyer_observation_space.high,
-            a_min=self.sawyer_observation_space.low,
-            dtype=np.float64,
+        
+        self._last_stable_obs = np.clip(self._last_stable_obs,
+        a_max=self.sawyer_observation_space.high,
+        a_min=self.sawyer_observation_space.low,
+        dtype=np.float64,
         )
+
         reward, info = self.evaluate_state(self._last_stable_obs, action)
+        info["success"] = info[self.task_spec.name]["success"]
         # step will never return a terminate==True if there is a success
         # but we can return truncate=True if the current path length == max path length
-        done = False
-        if self.curr_path_length == self.max_path_length:
-            done = True
+        done = (self.curr_path_length == self.max_path_length
+        or bool(info["success"])
+        )
         return (
             np.array(self._last_stable_obs, dtype=np.float64),
             reward,

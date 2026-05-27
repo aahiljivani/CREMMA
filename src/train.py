@@ -16,6 +16,7 @@ import torch
 from cleanrl_utils.buffers import ReplayBuffer
 
 
+
 class ContinualBenchVecEnv:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -156,11 +157,11 @@ class ContinualBenchVecEnv:
 
         # defining which tasks we have already seen
         seen_tasks = []
-        # for the task index and task name
+        # for the task index and task name this is where training starts per sequence of tasks
         for task_idx, task_name in enumerate(training_order):
             seen_tasks.append(task_name)
             vec_env = vec_envs[task_name]
-            # start with the vectorized env of task
+            # start with the vectorized env of task, this is where training starts per task level
 
             for ep in range(int(self.train_episodes_per_task)):
                 global_step = 0
@@ -173,9 +174,32 @@ class ContinualBenchVecEnv:
                     else:
                     # we can specify updates here and task specific buffer stuff. like if policy is sac warmup buffer and append to buffer
                     # HERE
-                        actions = agent.predict(obs, deterministic=False)
+                        actions = agent.predict(obs)
+                    truncated = np.array([False] * vec_env.num_envs)
+                    terminated = np.array([False] * vec_env.num_envs)
+                    next_obs, rewards, dones, infos = vec_env.step(actions)
+                    for idx, info in enumerate(infos):
+                        if info["success"] and dones[idx]:
+                            terminated[idx] = True
+
+                        elif dones[idx] and not info["success"]:
+                            truncated[idx] = True
+                    # replay buffer update of next obs when done is true
+                    real_next_obs = next_obs.copy()
+                    for idx, done in enumerate(dones):
+                        if done:
+                            real_next_obs[idx] = infos["final_observation"][idx]
+                    if self.cfg.replay_buffer:
+                        rb.add(obs, real_next_obs, actions, rewards, terminated, infos)
+
+                    obs = next_obs
+                    if global_step > self.cfg.learning_starts:
+                        data = rb.sample(self.cfg.batch_size)
+                        policy.update(data, global_step)
+                    if global_step % 100 == 0:
+                        ddpg_log(global_step)
+
                     
-                    obs, rewards, dones, infos = vec_env.step(actions)
 
                     # more logging of CRL metrics
                     successes = np.array(

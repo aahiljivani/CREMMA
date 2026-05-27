@@ -180,7 +180,7 @@ if __name__ == "__main__":
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         else:
             with torch.no_grad():
-                actions = actor(torch.Tensor(obs).to(device))
+                actions = actor(torch.Tensor(obs).to(device)) # shape is (num_envs, action_dim)
                 actions += torch.normal(0, actor.action_scale * args.exploration_noise)
                 actions = actions.cpu().numpy().clip(envs.single_action_space.low, envs.single_action_space.high)
 
@@ -234,6 +234,7 @@ if __name__ == "__main__":
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
             if global_step % 100 == 0:
+                # logging ddpg network metrics
                 writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
