@@ -13,6 +13,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tyro
 from torch.utils.tensorboard import SummaryWriter
+from cleanrl_utils.evals.ddpg_eval import evaluate
 
 from cleanrl_utils.buffers import ReplayBuffer
 from logger import ContinualLogger, ddpg_log
@@ -120,7 +121,24 @@ class DDPG(BaseAgent):
         return self
 
     def save(self, path):
-        pass
+        model_path = f"{path}/{self.cfg.exp_name}.cleanrl_model"
+        torch.save((actor.state_dict(), qf1.state_dict()), model_path)
+        print(f"model saved to {model_path}")
+        
+
+        episodic_returns = evaluate(
+            model_path,
+            self.env,
+            self.cfg.env_id,
+            eval_episodes=10,
+            run_name=f"{self.cfg.env_id}-{self.cfg.exp_name}-eval",
+            Model=(self.actor, self.qf1),
+            device=self.device,
+            exploration_noise=self.cfg.exploration_noise,
+        )
+        for idx, episodic_return in enumerate(episodic_returns):
+            writer.add_scalar("eval/episodic_return", episodic_return, idx)
+
 
 
     def ddpg_log(self,global_step, qf1_a_values, qf1_loss, actor_loss):
