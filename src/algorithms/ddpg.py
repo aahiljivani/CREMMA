@@ -87,7 +87,14 @@ class DDPG:
         return self
     
     def predict(self, obs, deterministic=True):
-        with torch.no_grad():
+        if deterministic:
+            with torch.no_grad():
+                actions = self.actor(torch.Tensor(obs).to(self.device))
+                action_space = _single_action_space(self.env)
+                actions = actions.cpu().numpy().clip(action_space.low, action_space.high)
+                return actions
+        else:
+            with torch.no_grad():
                 actions = self.actor(torch.Tensor(obs).to(self.device))
                 actions += torch.normal(0, self.actor.action_scale * self.cfg.exploration_noise)
                 action_space = _single_action_space(self.env)
@@ -137,7 +144,16 @@ class DDPG:
         return metrics
 
     def save(self, path):
-        model_path = f"{path}/{self.cfg.exp_name}.cleanrl_model"
+        model_path = f"{path}/{self.cfg.policy}.pt"
         torch.save((self.actor.state_dict(), self.qf1.state_dict()), model_path)
         print(f"model saved to {model_path}")
         return model_path
+
+    def load(self, path):
+        model_path = f"{path}/{self.cfg.policy}.pt"
+        self.actor.load_state_dict(torch.load(model_path)[0])
+        self.qf1.load_state_dict(torch.load(model_path)[1])
+        self.target_actor.load_state_dict(self.actor.state_dict())
+        self.qf1_target.load_state_dict(self.qf1.state_dict())
+        print(f"model loaded from {model_path}")
+        return self

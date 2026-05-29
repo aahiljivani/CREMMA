@@ -41,7 +41,8 @@ class ContinualBenchVecEnv:
     def _make_single_env(self, rank: int, task_name: str):
         ''' 
         creates a single environment for task_name with unique
-        seed and gymnasium compatibility wrapper
+        seed and gymnasium compatibility wrapper to bridge 
+        openai gym and gymnasium for sb3 parallel training
         '''
         seed = self.seed + rank
         task = task_name
@@ -54,7 +55,8 @@ class ContinualBenchVecEnv:
 
     def _build_training_order(self) -> List[str]:
         '''
-        error handling  and shuffling for random task order
+        error handling  and shuffling for random task
+         order or sequential task order or single task order.
         '''
         if self.benchmark_mode == "continual":
             return list(self.task_list)
@@ -79,16 +81,18 @@ class ContinualBenchVecEnv:
 
     def make_envs(self) -> Dict[str, SubprocVecEnv]: 
         ''' 
-        creates vectorized environment for parallel envs training across single task.
-        returns a dict mapping task_name to corresponding vectorized env.
+        creates vectorized environment for parallel envs training across all task(s) 
+        in training order. Returns a dict mapping task_name 
+        to corresponding vectorized env.
          '''
         vec_envs = {}
         for task_name in self._build_training_order():
             env_fns = [self._make_single_env(i, task_name) for i in range(self.num_envs)]
-            vec_envs[task_name] = self.vec_env_cls(env_fns, start_method="spawn")
+            vec_envs[task_name] = self.vec_env_cls(env_fns, start_method="spawn") 
+            # spawn for ensuring the gpu is not overutilized before policy implementation
         return vec_envs
 
-    def _build_policy(self, env, num_envs: int): # building SAC and PPO policies soon.
+    def _build_policy(self, env, num_envs: int): # specifying which policy to use.
         if self.cfg.policy == "RandomPolicy":
             return RandomPolicy(env.action_space, num_envs)
         if self.cfg.policy == "DDPG":
@@ -97,12 +101,13 @@ class ContinualBenchVecEnv:
             return SAC(self.cfg, env).reset()
         raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
-    def evaluate_seen_tasks(self, seen_tasks: List[str]) -> Dict[str, float]:
+    def evaluate_seen_tasks(self, agent, seen_tasks: List[str]) -> Dict[str, float]:
         task_scores = {}
 
         for task_name in seen_tasks:
             eval_env = DummyVecEnv([self._make_single_env(0, task_name)])
-            eval_policy = self._build_policy(eval_env, num_envs=1)
+            # we should load the policy from the checkpoint. TODO
+            
             episode_scores = []
 
             for _ in range(int(self.cfg.eval.num_eval_episodes)):
@@ -111,7 +116,7 @@ class ContinualBenchVecEnv:
                 step_scores = []
 
                 while not done[0]:
-                    actions = eval_policy.predict(obs, deterministic=True)
+                    actions = agent.predict(obs, deterministic=True)
                     obs, rewards, done, infos = eval_env.step(actions)
                     step_scores.append(float(infos[0]["success"]))
 
@@ -175,14 +180,12 @@ class ContinualBenchVecEnv:
 
                 for t in range(int(self.train_timesteps_per_episode)):
                     if logger.global_step < learning_starts:
-                        action_space = getattr(vec_env, "single_action_space", None)
-                        if action_space is None:
-                            action_space = vec_env.action_space
+                        action_space = vec_env.action_space
                         actions = np.array([action_space.sample() for _ in range(vec_env.num_envs)])
                     else:
                     # we can specify updates here and task specific buffer stuff. like if policy is sac warmup buffer and append to buffer
                     # HERE
-                        actions = agent.predict(obs)
+                        actions = agent.predict(obs, deterministic=False)
                     next_obs, rewards, dones, infos = vec_env.step(actions)
                     episode_returns += rewards
                     episode_lengths += 1
@@ -231,12 +234,14 @@ class ContinualBenchVecEnv:
                         logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
                     # here is where we evaluate all the seen tasks
                     if logger.global_step % int(self.cfg.eval.eval_every_steps) == 0:
-                        task_scores = self.evaluate_seen_tasks(seen_tasks)
+                        task_scores = self.evaluate_seen_tasks(agent=agent, seen_tasks=seen_tasks)
                         logger.log_evaluation(seen_tasks, task_scores)
 
             vec_env.close()
+            # save the policy here.
+            agent.save(path=f"checkpoints/{run_name}")
         # finish eval and logging
-        final_scores = self.evaluate_seen_tasks(seen_tasks)
+        final_scores = self.evaluate_seen_tasks(agent=agent, seen_tasks=seen_tasks)
         logger.log_evaluation(seen_tasks, final_scores)
         logger.finish(final_scores)
 
