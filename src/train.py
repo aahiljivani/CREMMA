@@ -13,6 +13,7 @@ from .logger import ContinualLogger
 from src.algorithms import DDPG, RandomPolicy, SAC
 import torch
 from stable_baselines3.common.buffers import ReplayBuffer
+import torch.optim as optim
 
 
 
@@ -95,6 +96,8 @@ class ContinualBenchVecEnv:
             return DDPG(self.cfg, env).reset()
         if self.cfg.policy == "SAC":
             return SAC(self.cfg, env).reset()
+        # if self.cfg.policy == "PPO":
+        #     return PPO(self.cfg, env).reset()
         raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
     def evaluate_seen_tasks(self, seen_tasks: List[str]) -> Dict[str, float]:
@@ -167,6 +170,14 @@ class ContinualBenchVecEnv:
             seen_tasks.append(task_name)
             vec_env = vec_envs[task_name]
             # start with the vectorized env of task, this is where training starts per task level
+            
+            if self.cfg.autotune: # automatic tuning of the entropy coefficient
+                target_entropy = -torch.prod(torch.Tensor(vec_env.action_space.shape).to(self.cfg.device)).item()
+                log_alpha = torch.zeros(1, requires_grad=True, device=self.cfg.device)
+                alpha = log_alpha.exp().item()
+                a_optimizer = optim.Adam([log_alpha], lr=self.cfg.q_lr)
+            else:
+                alpha = self.cfg.alpha # fixed entropy coefficient
 
             for ep in range(int(self.train_episodes_per_task)):
                 obs = vec_env.reset() # reset the vec env

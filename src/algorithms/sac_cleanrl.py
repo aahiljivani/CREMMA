@@ -66,30 +66,24 @@ class Args:
     """automatic tuning of the entropy coefficient"""
 
 
-def make_env(env_id, seed, idx, capture_video, run_name):
-    def thunk():
-        if capture_video and idx == 0:
-            env = gym.make(env_id, render_mode="rgb_array")
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        else:
-            env = gym.make(env_id)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        env.action_space.seed(seed)
-        return env
+def single_observation_space(env):
+    return env.observation_space
 
-    return thunk
+def single_action_space(env):
+    return env.action_space
 
 
 # ALGO LOGIC: initialize agent here:
 class SoftQNetwork(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, hidden_size):
+        self.hidden_size = hidden_size
         super().__init__()
         self.fc1 = nn.Linear(
             np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape),
-            256,
+            self.hidden_size,
         )
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 1)
+        self.fc2 = nn.Linear(self.hidden_size, self.hidden_size)
+        self.fc3 = nn.Linear(self.hidden_size, 1)
 
     def forward(self, x, a):
         x = torch.cat([x, a], 1)
@@ -104,24 +98,26 @@ LOG_STD_MIN = -5
 
 
 class Actor(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, hidden_size):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc_mean = nn.Linear(256, np.prod(env.single_action_space.shape))
-        self.fc_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
+        self.hidden_size = hidden_size
+        self.env = env
+        self.fc1 = nn.Linear(np.array(self.env.observation_space.shape).prod() + np.prod(self.env.action_space.shape), self.hidden_size)
+        self.fc2 = nn.Linear(self.hidden_size, self.hidden_size)
+        self.fc_mean = nn.Linear(self.hidden_size, np.prod(self.env.action_space.shape))
+        self.fc_logstd = nn.Linear(self.hidden_size, np.prod(self.env.action_space.shape))
         # action rescaling
         self.register_buffer(
             "action_scale",
             torch.tensor(
-                (env.single_action_space.high - env.single_action_space.low) / 2.0,
+                (self.env.action_space.high - self.env.action_space.low) / 2.0,
                 dtype=torch.float32,
             ),
         )
         self.register_buffer(
             "action_bias",
             torch.tensor(
-                (env.single_action_space.high + env.single_action_space.low) / 2.0,
+                (self.env.action_space.high + self.env.action_space.low) / 2.0,
                 dtype=torch.float32,
             ),
         )
@@ -135,6 +131,40 @@ class Actor(nn.Module):
         log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
 
         return mean, log_std
+    
+    class SAC:
+        def __init__(self, cfg, env):
+            self.cfg = cfg
+            self.env = env
+            self.device = cfg.device
+            self.hidden_size = cfg.hidden_size
+            self.learning_rate = cfg.learning_rate
+            self.gamma = cfg.gamma
+            self.tau = cfg.tau
+            self.batch_size = cfg.batch_size
+            self.buffer_size = cfg.buffer_size
+            self.learning_starts = cfg.learning_starts
+            self.policy_frequency = cfg.policy_frequency
+            self.target_network_frequency = cfg.target_network_frequency
+            self.alpha = cfg.alpha
+            self.autotune = cfg.autotune
+            self.start_time = time.time()
+        
+        def reset(self):
+            self.actor = Actor(self.env, self.hidden_size).to(self.device)
+            self.q1 = SoftQNetwork(self.env, self.hidden_size).to(self.device)
+            self.q2 = SoftQNetwork(self.env, self.hidden_size).to(self.device)
+            self.q1_target = SoftQNetwork(self.env, self.hidden_size).to(self.device)
+            self.q2_target = SoftQNetwork(self.env, self.hidden_size).to(self.device)
+            self.q1_target.load_state_dict(self.q1.state_dict())
+            self.q2_target.load_state_dict(self.q2.state_dict())
+            self.q_optimizer = optim.Adam(list(self.q1.parameters()) + list(self.q2.parameters()), lr=self.learning_rate)
+            self.actor_optimizer = optim.Adam(list(self.actor.parameters()), lr=self.learning_rate)
+            return self
+        
+        def predict(self, obs, deterministic=False):
+            
+
 
     def get_action(self, x):
         mean, log_std = self(x)

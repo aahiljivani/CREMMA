@@ -23,3 +23,4 @@ SAC:
   - """Entropy regularization coefficient."""
   - autotune: True
   - """automatic tuning of the entropy coefficient"""
+  - hidden_size: 256

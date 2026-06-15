@@ -8,19 +8,18 @@ import torch.optim as optim
 
 
 def _single_observation_space(env):
-    single_space = getattr(env, "single_observation_space", None)
-    return single_space if single_space is not None else env.observation_space
+    return env.observation_space
 
 
 def _single_action_space(env):
-    single_space = getattr(env, "single_action_space", None)
-    return single_space if single_space is not None else env.action_space
+    
+    return env.action_space
 
 # ALGO LOGIC: initialize agent here:
 class QNetwork(nn.Module):
     def __init__(self, env, hidden_size):
-        self.hidden_size = hidden_size
         super().__init__()
+        self.hidden_size = hidden_size
         observation_space = _single_observation_space(env)
         action_space = _single_action_space(env)
         self.fc1 = nn.Linear(np.array(observation_space.shape).prod() + np.prod(action_space.shape), hidden_size)
