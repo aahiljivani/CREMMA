@@ -100,12 +100,11 @@ class ContinualBenchVecEnv:
         #     return PPO(self.cfg, env).reset()
         raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
-    def evaluate_seen_tasks(self, seen_tasks: List[str]) -> Dict[str, float]:
+    def evaluate_seen_tasks(self, seen_tasks: List[str], agent) -> Dict[str, float]:
         task_scores = {}
 
         for task_name in seen_tasks:
             eval_env = DummyVecEnv([self._make_single_env(0, task_name)])
-            eval_policy = self._build_policy(eval_env, num_envs=1)
             episode_scores = []
 
             for _ in range(int(self.cfg.eval.num_eval_episodes)):
@@ -114,7 +113,7 @@ class ContinualBenchVecEnv:
                 step_scores = []
 
                 while not done[0]:
-                    actions = eval_policy.predict(obs, deterministic=True)
+                    actions = agent.predict(obs)
                     obs, rewards, done, infos = eval_env.step(actions)
                     step_scores.append(float(infos[0]["success"]))
 
@@ -137,11 +136,13 @@ class ContinualBenchVecEnv:
         # create the vectorized environments
         vec_envs = self.make_envs()
         training_order = list(vec_envs.keys())
-        # we need to change this, where we have to feed in every tasks vec env not just the first task
+        # to build the policy we need action space and observation space of the first task which is consistent across all tasks.
         first_env = vec_envs[training_order[0]]
         # building the policy will come from intitializing the agent first. i.e. calling SAC.reset()
         agent = self._build_policy(first_env, num_envs=self.num_envs)
+        # does our policy need a replay buffer?
         replay_buffer_enabled = bool(self.cfg.get("replay_buffer", False))
+        # random action sampling until the learning starts
         learning_starts = int(self.cfg.get("learning_starts", 0))
         if replay_buffer_enabled:
             rb = ReplayBuffer(
@@ -155,6 +156,8 @@ class ContinualBenchVecEnv:
 
         # logging CRL specific metrics here.
         run_name = f"{self.cfg.policy}_{self.cfg.benchmark_mode}_{self.num_envs}env_seed{self.seed}"
+        save_dir = Path("models") / run_name
+        save_dir.mkdir(parents=True, exist_ok=True)
         logger = ContinualLogger(
             project=self.cfg.logging.project,
             run_name=run_name,
@@ -169,15 +172,10 @@ class ContinualBenchVecEnv:
         for task_idx, task_name in enumerate(training_order):
             seen_tasks.append(task_name)
             vec_env = vec_envs[task_name]
-            # start with the vectorized env of task, this is where training starts per task level
-            
-            if self.cfg.autotune: # automatic tuning of the entropy coefficient
-                target_entropy = -torch.prod(torch.Tensor(vec_env.action_space.shape).to(self.cfg.device)).item()
-                log_alpha = torch.zeros(1, requires_grad=True, device=self.cfg.device)
-                alpha = log_alpha.exp().item()
-                a_optimizer = optim.Adam([log_alpha], lr=self.cfg.q_lr)
-            else:
-                alpha = self.cfg.alpha # fixed entropy coefficient
+            # load weights from previous task before starting training on this one
+            if task_idx > 0 and hasattr(agent, "load"):
+                agent.load(str(save_dir))
+                print(f"[Task {task_idx}] Loaded checkpoint from task {training_order[task_idx - 1]}")
 
             for ep in range(int(self.train_episodes_per_task)):
                 obs = vec_env.reset() # reset the vec env
@@ -200,7 +198,7 @@ class ContinualBenchVecEnv:
                         dtype=np.float32,
                     )
                     terminated = np.logical_and(dones, successes.astype(bool))
-                    # replay buffer update of next obs when done is true
+                    #SB3 terminal observation handling not relevant in continualbench
                     real_next_obs = next_obs.copy()
                     for idx, done in enumerate(dones):
                         if done:
@@ -240,12 +238,17 @@ class ContinualBenchVecEnv:
                         logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
                     # here is where we evaluate all the seen tasks
                     if logger.global_step % int(self.cfg.eval.eval_every_steps) == 0:
-                        task_scores = self.evaluate_seen_tasks(seen_tasks)
+                        task_scores = self.evaluate_seen_tasks(seen_tasks, agent)
                         logger.log_evaluation(seen_tasks, task_scores)
 
             vec_env.close()
+            # save checkpoint after finishing this task
+            if hasattr(agent, "save"):
+                agent.save(str(save_dir))
+                print(f"[Task {task_idx}] Saved checkpoint after task {task_name}")
+
         # finish eval and logging
-        final_scores = self.evaluate_seen_tasks(seen_tasks)
+        final_scores = self.evaluate_seen_tasks(seen_tasks, agent)
         logger.log_evaluation(seen_tasks, final_scores)
         logger.finish(final_scores)
 
