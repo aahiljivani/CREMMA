@@ -1,3 +1,4 @@
+import os
 from os import path
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -5,6 +6,10 @@ import gym
 import numpy as np
 from gym import error, logger, spaces
 from gym.spaces import Space
+
+# Use EGL for headless offscreen rendering (GPU servers without a display).
+# Only set if the user hasn't already chosen a backend (e.g. "glfw"/"osmesa").
+os.environ.setdefault("MUJOCO_GL", "egl")
 
 try:
     import mujoco_py
@@ -348,6 +353,7 @@ class MujocoEnv(BaseMujocoEnv):
             camera_id,
             camera_name,
         )
+        self._mujoco_renderer = None
 
     def _initialize_simulation(
         self,
@@ -382,6 +388,41 @@ class MujocoEnv(BaseMujocoEnv):
 
     def get_body_com(self, body_name):
         return self.data.body(body_name).xpos
+
+    def _resolve_camera(self):
+        if self.camera_id is not None:
+            return self.camera_id
+        if self.camera_name is not None:
+            return self.camera_name
+        # "corner" is defined in the shared xyz_base.xml scene
+        return "corner"
+
+    def render(self):
+        if self.render_mode is None:
+            return None
+        if self.render_mode not in {"rgb_array", "depth_array"}:
+            raise NotImplementedError(
+                f"render_mode={self.render_mode!r} is not supported (use 'rgb_array' or 'depth_array')."
+            )
+
+        if self._mujoco_renderer is None:
+            self._mujoco_renderer = mujoco.Renderer(self.model, height=self.height, width=self.width)
+
+        camera = self._resolve_camera()
+        if self.render_mode == "depth_array":
+            self._mujoco_renderer.enable_depth_rendering()
+            self._mujoco_renderer.update_scene(self.data, camera=camera)
+            frame = self._mujoco_renderer.render()
+            self._mujoco_renderer.disable_depth_rendering()
+            return frame
+
+        self._mujoco_renderer.update_scene(self.data, camera=camera)
+        return self._mujoco_renderer.render()
+
+    def close(self):
+        if self._mujoco_renderer is not None:
+            self._mujoco_renderer.close()
+            self._mujoco_renderer = None
 
 
 def _assert_task_is_set(func):
