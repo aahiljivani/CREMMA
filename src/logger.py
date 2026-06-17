@@ -83,8 +83,15 @@ class ContinualLogger:
         if self.run is None:
             return
         video = np.stack(frames)
+        # DummyVecEnv may return (1, H, W, C) per frame → stack gives (T, 1, H, W, C)
         if video.ndim == 5:
             video = video[:, 0]
+        # Grayscale envs return (H, W) per frame → stack gives (T, H, W); add channel dim
+        if video.ndim == 3:
+            video = video[..., np.newaxis]
+        if video.ndim != 4:
+            raise ValueError(f"Unexpected video shape after normalisation: {video.shape}")
+        # wandb.Video expects (T, C, H, W)
         video = video.transpose(0, 3, 1, 2)
         self.run.log({
             f"eval/video_{task_name}_ep{ep_idx}": wandb.Video(video.astype(np.uint8), fps=30, format="mp4"),
