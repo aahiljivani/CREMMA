@@ -38,7 +38,7 @@ class ContinualBenchVecEnv:
             return DummyVecEnv
         raise ValueError("vec_env_cls must be one of {'SubprocVecEnv', 'DummyVecEnv'}")
 
-    def _make_single_env(self, rank: int, task_name: str):
+    def _make_single_env(self, rank: int, task_name: str, render_mode=None):
         ''' 
         creates a single environment for task_name with unique
         seed and gymnasium compatibility wrapper
@@ -47,7 +47,7 @@ class ContinualBenchVecEnv:
         task = task_name
 
         def _init():
-            env = ContinualBenchEnv(render_mode=None, seed=seed)
+            env = ContinualBenchEnv(render_mode=render_mode, seed=seed)
             env.set_task(task)
             wrapped_env = GymV21CompatibilityV0(env=env)
             wrapped_env.max_path_length = env.max_path_length
@@ -101,24 +101,31 @@ class ContinualBenchVecEnv:
         #     return PPO(self.cfg, env).reset()
         raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
-    def evaluate_seen_tasks(self, seen_tasks: List[str], agent) -> Dict[str, float]:
+    def evaluate_seen_tasks(self, seen_tasks: List[str], agent, logger) -> Dict[str, float]:
         task_scores = {}
+        record = logger.run is not None and logger.global_step % 10000 == 0
+        render_mode = "rgb_array" if record else None
 
         for task_name in seen_tasks:
-            eval_env = DummyVecEnv([self._make_single_env(0, task_name)])
+            eval_env = DummyVecEnv([self._make_single_env(0, task_name, render_mode=render_mode)])
             episode_scores = []
 
-            for _ in range(int(self.cfg.eval.num_eval_episodes)):
+            for ep_idx in range(int(self.cfg.eval.num_eval_episodes)):
                 obs = eval_env.reset()
                 done = [False]
                 step_scores = []
+                frames = []
 
                 while not done[0]:
                     actions = agent.predict(obs)
                     obs, rewards, done, infos = eval_env.step(actions)
                     step_scores.append(float(infos[0]["success"]))
+                    if record:
+                        frames.append(eval_env.render())
 
                 episode_scores.append(float(np.mean(step_scores)) if step_scores else 0.0)
+                if record and frames:
+                    logger.log_video(task_name, ep_idx, frames)
 
             eval_env.close()
             task_scores[task_name] = float(np.mean(episode_scores)) if episode_scores else 0.0
@@ -242,7 +249,7 @@ class ContinualBenchVecEnv:
                         logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
                     # here is where we evaluate all the seen tasks
                     if logger.global_step % int(self.cfg.eval.eval_every_steps) == 0:
-                        task_scores = self.evaluate_seen_tasks(seen_tasks, agent)
+                        task_scores = self.evaluate_seen_tasks(seen_tasks, agent, logger)
                         logger.log_evaluation(seen_tasks, task_scores)
 
             vec_env.close()
@@ -252,7 +259,7 @@ class ContinualBenchVecEnv:
                 print(f"[Task {task_idx}] Saved checkpoint after task {task_name}")
 
         # finish eval and logging
-        final_scores = self.evaluate_seen_tasks(seen_tasks, agent)
+        final_scores = self.evaluate_seen_tasks(seen_tasks, agent, logger)
         logger.log_evaluation(seen_tasks, final_scores)
         logger.finish(final_scores)
 

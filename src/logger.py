@@ -79,6 +79,18 @@ class ContinualLogger:
             self.run.log(payload)
         return ap_seen
 
+    def log_video(self, task_name: str, ep_idx: int, frames: list):
+        if self.run is None:
+            return
+        video = np.stack(frames)
+        if video.ndim == 5:
+            video = video[:, 0]
+        video = video.transpose(0, 3, 1, 2)
+        self.run.log({
+            f"eval/video_{task_name}_ep{ep_idx}": wandb.Video(video.astype(np.uint8), fps=30, format="mp4"),
+            "global_step": self.global_step,
+        })
+
     def finish(self, final_task_scores=None):
         if self.run is None:
             return
