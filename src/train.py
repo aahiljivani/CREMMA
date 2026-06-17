@@ -1,3 +1,10 @@
+import os
+
+# Select an offscreen OpenGL backend BEFORE any mujoco import so eval rendering
+# works on headless servers (no DISPLAY). EGL uses the GPU; set MUJOCO_GL=osmesa
+# for a CPU fallback if EGL is unavailable. setdefault respects a user override.
+os.environ.setdefault("MUJOCO_GL", "egl")
+
 import random
 from pathlib import Path
 from typing import Dict, List
