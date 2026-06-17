@@ -304,7 +304,6 @@ logging:
 
 train:
   episodes_per_task: 100
-  timesteps_per_episode: 500
 
 eval:
   eval_every_steps: 1000

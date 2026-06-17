@@ -27,7 +27,6 @@ class ContinualBenchVecEnv:
         self.single_task_name = cfg.get("single_task_name", None)
         self.vec_env_cls = self._resolve_vec_env_cls(cfg.vec_env_cls)
         self.train_episodes_per_task = int(cfg.train.episodes_per_task)
-        self.train_timesteps_per_episode = int(cfg.train.timesteps_per_episode)
         self.eval_every_steps = int(cfg.eval.eval_every_steps)
         self.num_eval_episodes = int(cfg.eval.num_eval_episodes)
 
@@ -50,7 +49,9 @@ class ContinualBenchVecEnv:
         def _init():
             env = ContinualBenchEnv(render_mode=None, seed=seed)
             env.set_task(task)
-            return GymV21CompatibilityV0(env=env)
+            wrapped_env = GymV21CompatibilityV0(env=env)
+            wrapped_env.max_path_length = env.max_path_length
+            return wrapped_env
         return _init
 
     def _build_training_order(self) -> List[str]:
@@ -174,6 +175,7 @@ class ContinualBenchVecEnv:
         for task_idx, task_name in enumerate(training_order):
             seen_tasks.append(task_name)
             vec_env = vec_envs[task_name]
+            max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
             # load weights from previous task before starting training on this one
             if task_idx > 0 and hasattr(agent, "load"):
                 agent.load(str(save_dir))
@@ -184,7 +186,7 @@ class ContinualBenchVecEnv:
                 episode_returns = np.zeros(vec_env.num_envs, dtype=np.float32)
                 episode_lengths = np.zeros(vec_env.num_envs, dtype=np.int32)
 
-                for t in range(int(self.train_timesteps_per_episode)):
+                for t in range(max_episode_steps):
                     if logger.global_step < learning_starts:
                         action_space = vec_env.action_space
                         actions = np.array([action_space.sample() for _ in range(vec_env.num_envs)])

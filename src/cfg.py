@@ -11,6 +11,12 @@ def parse_cfg(cfg_path: Path):
     if policy is None:
         raise ValueError("policy must be specified via CLI, e.g. policy=DDPG")
 
+    if "timesteps_per_episode" in cli.get("train", {}):
+        raise ValueError(
+            "train.timesteps_per_episode is no longer supported; "
+            "episode length is read from the ContinualBench environment."
+        )
+
     policy_cfg = cfg_path / "algorithms" / f"{policy.lower()}.yaml"
     if policy_cfg.exists():
         base.merge_with(OmegaConf.load(policy_cfg))
