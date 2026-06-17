@@ -165,6 +165,7 @@ class ContinualBenchVecEnv:
             enable_wandb=bool(self.cfg.logging.enable_wandb),
             entity=self.cfg.logging.get("wandb_entity", None),
             config=OmegaConf.to_container(self.cfg, resolve=True),
+            num_envs=self.num_envs,
         )
 
         # defining which tasks we have already seen

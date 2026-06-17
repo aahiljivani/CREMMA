@@ -4,8 +4,9 @@ import time
 
 
 class ContinualLogger:
-    def __init__(self, project, config, run_name=None, enable_wandb=True, entity=None):
+    def __init__(self, project, config, run_name=None, enable_wandb=True, entity=None, num_envs=1):
         self.enable_wandb = enable_wandb
+        self.num_envs = int(num_envs)
         self.global_step = 0
         self.regret_sum = 0.0
         self.run = None
@@ -23,7 +24,7 @@ class ContinualLogger:
 
     def update_online(self, task_name, task_idx, episode_idx, timestep_in_episode, successes):
         online_success = self.step_success(successes)
-        self.global_step += 1
+        self.global_step += self.num_envs
         self.regret_sum += (1.0 - online_success)
         regret_running = self.regret_sum / self.global_step
 
