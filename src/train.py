@@ -121,7 +121,11 @@ class ContinualBenchVecEnv:
                     obs, rewards, done, infos = eval_env.step(actions)
                     step_scores.append(float(infos[0]["success"]))
                     if record:
-                        frames.append(eval_env.render())
+                        # Render directly from the underlying env. The SB3 vec env /
+                        # shimmy wrapper render path returns None because render_mode
+                        # isn't propagated to the wrapper, and the wrapper passes an
+                        # unsupported mode= kwarg. The env already has render_mode set.
+                        frames.append(eval_env.envs[0].gym_env.render())
 
                 episode_scores.append(float(np.mean(step_scores)) if step_scores else 0.0)
                 if record and frames:
