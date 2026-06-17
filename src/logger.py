@@ -25,7 +25,8 @@ class ContinualLogger:
     def update_online(self, task_name, task_idx, episode_idx, timestep_in_episode, successes):
         online_success = self.step_success(successes)
         self.global_step += self.num_envs
-        self.regret_sum += (1.0 - online_success)
+        # weight by num_envs so the running average is over env-steps, matching global_step
+        self.regret_sum += (1.0 - online_success) * self.num_envs
         regret_running = self.regret_sum / self.global_step
 
         payload = {
@@ -33,7 +34,6 @@ class ContinualLogger:
             "task_idx": int(task_idx),
             "episode_idx": int(episode_idx),
             "timestep_in_episode": int(timestep_in_episode),
-            "online_success_current_task": online_success,
             "regret_running": float(regret_running),
             f"train_success_{task_name}": online_success,
         }

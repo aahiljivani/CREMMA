@@ -173,11 +173,10 @@ class SAC:
 
         elapsed_time = max(time.time() - self.start_time, 1e-9)
         metrics = {
-            "losses/q1_values": q1_a_values.mean().item(),
-            "losses/q2_values": q2_a_values.mean().item(),
+            "charts/q1_values": q1_a_values.mean().item(),
+            "charts/q2_values": q2_a_values.mean().item(),
             "losses/q1_loss": q1_loss.item(),
             "losses/q2_loss": q2_loss.item(),
-            "losses/q_loss": q_loss.item() / 2.0,
             "losses/actor_loss": actor_loss.item() if actor_loss is not None else None,
             "losses/alpha": self.alpha,
             "charts/SPS": int(global_step / elapsed_time),
