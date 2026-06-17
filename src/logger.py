@@ -11,12 +11,18 @@ class ContinualLogger:
         self.regret_sum = 0.0
         self.run = None
         self.start_time = time.time()
+        # per-task episodic success tracking (reset each task)
+        self._task_episodes = 0
+        self._task_successes = 0
+        # frozen snapshot of each completed task's final episodic success rate
+        self._completed_task_aps: dict = {}
         if self.enable_wandb:
             self.run = wandb.init(project=project, entity=entity, name=run_name, config=config)
             self.run.define_metric("global_step")
             self.run.define_metric("*", step_metric="global_step")
             self.run.define_metric("regret_running", summary="last")
-            self.run.define_metric("eval_ap_seen_tasks", summary="max")
+            self.run.define_metric("train_task_episodic_success", summary="last")
+            self.run.define_metric("train_ap_completed_tasks", summary="last")
 
     @staticmethod
     def step_success(successes):
@@ -41,6 +47,46 @@ class ContinualLogger:
             self.run.log(payload)
         return online_success, float(regret_running)
 
+    def on_episode_end(self, task_name: str, success: bool):
+        """
+        Call once per finished episode during training on the current task.
+        Tracks episodic success rate and logs it continuously.
+        """
+        self._task_episodes += 1
+        if success:
+            self._task_successes += 1
+        rate = self._task_successes / self._task_episodes
+        payload = {
+            "global_step": self.global_step,
+            "train_task_episodic_success": float(rate),
+            f"train_episodic_success_{task_name}": float(rate),
+        }
+        if self.run is not None:
+            self.run.log(payload)
+        return float(rate)
+
+    def on_task_end(self, task_name: str):
+        """
+        Call once after all training episodes for a task are done.
+        Freezes that task's episodic success rate, updates the running
+        average over all completed tasks, then resets per-task counters.
+        """
+        final_rate = self._task_successes / self._task_episodes if self._task_episodes > 0 else 0.0
+        self._completed_task_aps[task_name] = final_rate
+        ap_completed = float(np.mean(list(self._completed_task_aps.values())))
+        payload = {
+            "global_step": self.global_step,
+            f"train_final_episodic_success_{task_name}": final_rate,
+            "train_ap_completed_tasks": ap_completed,
+            "num_completed_tasks": len(self._completed_task_aps),
+        }
+        if self.run is not None:
+            self.run.log(payload)
+        # reset for the next task
+        self._task_episodes = 0
+        self._task_successes = 0
+        return final_rate, ap_completed
+
     def log_metrics(self, metrics, step=None, prefix=None):
         if not metrics:
             return {}
@@ -59,25 +105,6 @@ class ContinualLogger:
 
     def log_algorithm_metrics(self, metrics, step=None):
         return self.log_metrics(metrics, step=step)
-
-    @staticmethod
-    def average_performance(task_scores):
-        if not task_scores:
-            return 0.0
-        return float(np.mean(list(task_scores.values())))
-
-    def log_evaluation(self, seen_tasks, task_scores):
-        ap_seen = self.average_performance(task_scores)
-        payload = {
-            "global_step": self.global_step,
-            "num_seen_tasks": len(seen_tasks),
-            "eval_ap_seen_tasks": ap_seen,
-        }
-        for task_name, score in task_scores.items():
-            payload[f"eval_success_{task_name}"] = float(score)
-        if self.run is not None:
-            self.run.log(payload)
-        return ap_seen
 
     def log_video(self, task_name: str, ep_idx: int, frames: list):
         if self.run is None:
@@ -98,15 +125,16 @@ class ContinualLogger:
             "global_step": self.global_step,
         })
 
-    def finish(self, final_task_scores=None):
+    def finish(self):
         if self.run is None:
             return
-        final_task_scores = final_task_scores or {}
-        final_ap = self.average_performance(final_task_scores)
         final_regret = self.regret_sum / self.global_step if self.global_step > 0 else 0.0
-        self.run.summary["final_eval_ap_seen_tasks"] = float(final_ap)
         self.run.summary["final_regret_running"] = float(final_regret)
         self.run.summary["total_global_steps"] = int(self.global_step)
-        for task_name, score in final_task_scores.items():
-            self.run.summary[f"final_eval_success_{task_name}"] = float(score)
+        if self._completed_task_aps:
+            self.run.summary["final_train_ap_completed_tasks"] = float(
+                np.mean(list(self._completed_task_aps.values()))
+            )
+            for task_name, rate in self._completed_task_aps.items():
+                self.run.summary[f"final_train_episodic_success_{task_name}"] = float(rate)
         self.run.finish()

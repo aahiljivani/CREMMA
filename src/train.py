@@ -108,41 +108,6 @@ class ContinualBenchVecEnv:
         #     return PPO(self.cfg, env).reset()
         raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
-    def evaluate_seen_tasks(self, seen_tasks: List[str], agent, logger) -> Dict[str, float]:
-        task_scores = {}
-        record = logger.run is not None and logger.global_step % 10000 == 0
-        render_mode = "rgb_array" if record else None
-
-        for task_name in seen_tasks:
-            eval_env = DummyVecEnv([self._make_single_env(0, task_name, render_mode=render_mode)])
-            episode_scores = []
-
-            for ep_idx in range(int(self.cfg.eval.num_eval_episodes)):
-                obs = eval_env.reset()
-                done = [False]
-                step_scores = []
-                frames = []
-
-                while not done[0]:
-                    actions = agent.predict(obs)
-                    obs, rewards, done, infos = eval_env.step(actions)
-                    step_scores.append(float(infos[0]["success"]))
-                    if record:
-                        # Render directly from the underlying env. The SB3 vec env /
-                        # shimmy wrapper render path returns None because render_mode
-                        # isn't propagated to the wrapper, and the wrapper passes an
-                        # unsupported mode= kwarg. The env already has render_mode set.
-                        frames.append(eval_env.envs[0].gym_env.render())
-
-                episode_scores.append(float(np.mean(step_scores)) if step_scores else 0.0)
-                if record and frames:
-                    logger.log_video(task_name, ep_idx, frames)
-
-            eval_env.close()
-            task_scores[task_name] = float(np.mean(episode_scores)) if episode_scores else 0.0
-
-        return task_scores
-
     def train(self):
         # seeding
         random.seed(self.cfg.seed)
@@ -187,11 +152,7 @@ class ContinualBenchVecEnv:
             num_envs=self.num_envs,
         )
 
-        # defining which tasks we have already seen
-        seen_tasks = []
-        # for the task index and task name this is where training starts per sequence of tasks
         for task_idx, task_name in enumerate(training_order):
-            seen_tasks.append(task_name)
             vec_env = vec_envs[task_name]
             max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
             # load weights from previous task before starting training on this one
@@ -247,6 +208,10 @@ class ContinualBenchVecEnv:
                                 "charts/episodic_length": int(episode_lengths[idx]),
                             }
                         )
+                        logger.on_episode_end(
+                            task_name=task_name,
+                            success=bool(infos[idx]["success"]),
+                        )
                         episode_returns[idx] = 0.0
                         episode_lengths[idx] = 0
 
@@ -258,21 +223,16 @@ class ContinualBenchVecEnv:
                         data = rb.sample(self.cfg.batch_size)
                         algorithm_metrics = agent.update(data, logger.global_step)
                         logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
-                    # here is where we evaluate all the seen tasks
-                    if logger.global_step % int(self.cfg.eval.eval_every_steps) == 0:
-                        task_scores = self.evaluate_seen_tasks(seen_tasks, agent, logger)
-                        logger.log_evaluation(seen_tasks, task_scores)
-
             vec_env.close()
+            # freeze this task's episodic success rate and update AP over completed tasks
+            final_rate, ap_completed = logger.on_task_end(task_name)
+            print(f"[Task {task_idx}] {task_name} final episodic success={final_rate:.3f}  AP over completed tasks={ap_completed:.3f}")
             # save checkpoint after finishing this task
             if hasattr(agent, "save"):
                 agent.save(str(save_dir))
                 print(f"[Task {task_idx}] Saved checkpoint after task {task_name}")
 
-        # finish eval and logging
-        final_scores = self.evaluate_seen_tasks(seen_tasks, agent, logger)
-        logger.log_evaluation(seen_tasks, final_scores)
-        logger.finish(final_scores)
+        logger.finish()
 
 
 def main():

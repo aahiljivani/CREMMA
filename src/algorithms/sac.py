@@ -115,7 +115,7 @@ class SAC:
             action, _, _ = self.actor.get_action(torch.Tensor(obs).to(self.device))
             return action.cpu().numpy()
     
-    def update(self, data, global_step):
+    def update(self, data, global_step): # where data is a ReplayBuffer with torch.tensor type
         actor_loss = None
         alpha_loss = None
 
