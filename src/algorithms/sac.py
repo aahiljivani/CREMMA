@@ -69,6 +69,7 @@ class Actor(nn.Module):
         log_prob = normal.log_prob(x_t)
         log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
         log_prob = log_prob.sum(1, keepdim=True)
+        mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
 
 
@@ -161,11 +162,11 @@ class SAC:
                     self.a_optimizer.step()
                     self.alpha = self.log_alpha.exp().item()
 
-            if global_step % self.target_network_frequency == 0:
-                for param, target_param in zip(self.q1.parameters(), self.q1_target.parameters()):
-                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-                for param, target_param in zip(self.q2.parameters(), self.q2_target.parameters()):
-                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+        if global_step % self.target_network_frequency == 0:
+            for param, target_param in zip(self.q1.parameters(), self.q1_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            for param, target_param in zip(self.q2.parameters(), self.q2_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
         if global_step % 100 != 0:
             return {}

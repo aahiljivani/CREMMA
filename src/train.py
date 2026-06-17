@@ -145,6 +145,7 @@ class ContinualBenchVecEnv:
         # random action sampling until the learning starts
         learning_starts = int(self.cfg.get("learning_starts", 0))
         if replay_buffer_enabled:
+            first_env.observation_space.dtype = np.float32
             rb = ReplayBuffer(
                 self.cfg.buffer_size,
                 first_env.observation_space,

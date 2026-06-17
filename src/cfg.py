@@ -3,7 +3,7 @@ from pathlib import Path
 from omegaconf import OmegaConf
 
 
-def parse_cfg(cfg_path: Path, mode: str = "continual"):
+def parse_cfg(cfg_path: Path):
     base = OmegaConf.load(cfg_path / "default.yaml")
     cli = OmegaConf.from_cli()
 
@@ -15,9 +15,7 @@ def parse_cfg(cfg_path: Path, mode: str = "continual"):
     if policy_cfg.exists():
         base.merge_with(OmegaConf.load(policy_cfg))
 
-    if mode is None:
-        mode = cli.get("benchmark_mode", base.benchmark_mode)
-
+    mode = cli.get("benchmark_mode", base.benchmark_mode)
     mode_cfg = cfg_path / f"{mode}.yaml"
     if mode_cfg.exists():
         base.merge_with(OmegaConf.load(mode_cfg))
