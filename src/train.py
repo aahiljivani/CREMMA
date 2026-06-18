@@ -164,7 +164,7 @@ class ContinualBenchVecEnv:
             config=OmegaConf.to_container(self.cfg, resolve=True),
             num_envs=self.num_envs,
         )
-
+        seen_tasks = []
         for task_idx, task_name in enumerate(training_order):
             vec_env = vec_envs[task_name]
             max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
@@ -193,6 +193,7 @@ class ContinualBenchVecEnv:
                         [float(info["success"]) for info in infos],
                         dtype=np.float32,
                     )
+                    # if both done and success then the episode is terminated or if just done is true as well
                     terminated = np.logical_and(dones, successes.astype(bool))
                     #SB3 terminal observation handling not relevant in continualbench
                     real_next_obs = next_obs.copy()
@@ -224,6 +225,7 @@ class ContinualBenchVecEnv:
                         logger.on_episode_end(
                             task_name=task_name,
                             success=bool(infos[idx]["success"]),
+                            episode_length=int(episode_lengths[idx]),
                         )
                         episode_returns[idx] = 0.0
                         episode_lengths[idx] = 0
@@ -241,14 +243,15 @@ class ContinualBenchVecEnv:
                     if logger.run is not None and logger.global_step % int(self.cfg.eval.eval_every_steps) == 0:
                         self.record_video(task_name, agent, logger)
             vec_env.close()
-            # freeze this task's episodic success rate and update AP over completed tasks
-            final_rate, ap_completed = logger.on_task_end(task_name)
-            print(f"[Task {task_idx}] {task_name} final episodic success={final_rate:.3f}  AP over completed tasks={ap_completed:.3f}")
-            # save checkpoint after finishing this task
+            logger.on_task_end(task_name)
+            seen_tasks.append(task_name)
+            per_task = self.evaluate_seen_tasks(seen_tasks, agent)
+            ap = logger.log_offline_ap(per_task)
+            print(f"[Task {task_idx}] {task_name} done. AP(w)={ap:.3f}  per-task={per_task}")
             if hasattr(agent, "save"):
                 agent.save(str(save_dir))
                 print(f"[Task {task_idx}] Saved checkpoint after task {task_name}")
-
+                
         logger.finish()
 
 

@@ -85,7 +85,7 @@ class DDPG:
         self.actor_optimizer = optim.Adam(list(self.actor.parameters()), lr=self.learning_rate)
         return self
     
-    def predict(self, obs, deterministic=True):
+    def predict(self, obs):
         with torch.no_grad():
                 actions = self.actor(torch.Tensor(obs).to(self.device))
                 actions += torch.normal(0, self.actor.action_scale * self.cfg.exploration_noise)
