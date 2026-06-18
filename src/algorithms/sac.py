@@ -93,6 +93,7 @@ class SAC:
         self.q_lr = cfg.q_lr
 
     def reset(self):
+        self.update_count = 0
         self.actor = Actor(self.env, self.hidden_size).to(self.device)
         self.q1 = SoftQNetwork(self.env, self.hidden_size).to(self.device)
         self.q2 = SoftQNetwork(self.env, self.hidden_size).to(self.device)
@@ -115,7 +116,8 @@ class SAC:
             action, _, _ = self.actor.get_action(torch.Tensor(obs).to(self.device))
             return action.cpu().numpy()
     
-    def update(self, data, global_step): # where data is a ReplayBuffer with torch.tensor type
+    def update(self, data): # where data is a ReplayBuffer with torch.tensor type
+        self.update_count += 1
         actor_loss = None
         alpha_loss = None
 
@@ -140,7 +142,7 @@ class SAC:
         q_loss.backward()
         self.q_optimizer.step()
 
-        if global_step % self.policy_frequency == 0:  # TD3-style delayed actor update
+        if self.update_count % self.policy_frequency == 0:  # TD3-style delayed actor update
             for _ in range(self.policy_frequency):
                 pi, log_pi, _ = self.actor.get_action(data.observations)
                 q1_pi = self.q1(data.observations, pi)
@@ -162,13 +164,14 @@ class SAC:
                     self.a_optimizer.step()
                     self.alpha = self.log_alpha.exp().item()
 
-        if global_step % self.target_network_frequency == 0:
+        # soft update target networks every target_network_frequency gradient steps
+        if self.update_count % self.target_network_frequency == 0:
             for param, target_param in zip(self.q1.parameters(), self.q1_target.parameters()):
                 target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
             for param, target_param in zip(self.q2.parameters(), self.q2_target.parameters()):
                 target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-        if global_step % 100 != 0:
+        if self.update_count % 100 != 0:
             return {}
 
         elapsed_time = max(time.time() - self.start_time, 1e-9)
@@ -179,7 +182,7 @@ class SAC:
             "losses/q2_loss": q2_loss.item(),
             "losses/actor_loss": actor_loss.item() if actor_loss is not None else None,
             "losses/alpha": self.alpha,
-            "charts/SPS": int(global_step / elapsed_time),
+            "charts/SPS": int(self.update_count / elapsed_time),
         }
         if self.autotune:
             metrics["losses/alpha_loss"] = alpha_loss.item() if alpha_loss is not None else None

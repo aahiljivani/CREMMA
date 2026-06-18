@@ -220,8 +220,9 @@ class ContinualBenchVecEnv:
                         and logger.global_step > learning_starts
                         and hasattr(agent, "update")
                     ):
-                        data = rb.sample(self.cfg.batch_size)
-                        algorithm_metrics = agent.update(data, logger.global_step)
+                        for _ in range(self.num_envs):
+                            data = rb.sample(self.cfg.batch_size)
+                            algorithm_metrics = agent.update(data)
                         logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
             vec_env.close()
             # freeze this task's episodic success rate and update AP over completed tasks
