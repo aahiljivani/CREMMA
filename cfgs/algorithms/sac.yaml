@@ -15,4 +15,4 @@ learning_starts: 5000
 policy_frequency: 2
 target_network_frequency: 1
 alpha: 0.2
-autotune: true
+autotune: false

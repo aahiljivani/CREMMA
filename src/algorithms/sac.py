@@ -105,8 +105,8 @@ class SAC:
         self.q_optimizer = optim.Adam(list(self.q1.parameters()) + list(self.q2.parameters()), lr=self.q_lr)
         self.actor_optimizer = optim.Adam(list(self.actor.parameters()), lr=self.learning_rate)
         if self.autotune:
-            # 2x to encourage more exploration
-            self.target_entropy = -2.0 * torch.prod(torch.Tensor(self.env.action_space.shape).to(self.device)).item()
+            
+            self.target_entropy = -torch.prod(torch.Tensor(self.env.action_space.shape).to(self.device)).item()
             self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
             self.alpha = self.log_alpha.exp().item()
             self.a_optimizer = optim.Adam([self.log_alpha], lr=self.q_lr)
