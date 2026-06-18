@@ -108,6 +108,19 @@ class ContinualBenchVecEnv:
         #     return PPO(self.cfg, env).reset()
         raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
+    def record_video(self, task_name, agent, logger):
+        eval_env = DummyVecEnv([self._make_single_env(0, task_name, render_mode="rgb_array")])
+        obs = eval_env.reset()
+        done = [False]
+        frames = []
+        while not done[0]:
+            actions = agent.predict(obs)
+            obs, _, done, _ = eval_env.step(actions)
+            frames.append(eval_env.envs[0].gym_env.render())
+        eval_env.close()
+        if frames:
+            logger.log_video(task_name, logger.global_step, frames)
+
     def train(self):
         # seeding
         random.seed(self.cfg.seed)
@@ -224,6 +237,9 @@ class ContinualBenchVecEnv:
                             data = rb.sample(self.cfg.batch_size)
                             algorithm_metrics = agent.update(data)
                         logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
+
+                    if logger.run is not None and logger.global_step % int(self.cfg.eval.eval_every_steps) == 0:
+                        self.record_video(task_name, agent, logger)
             vec_env.close()
             # freeze this task's episodic success rate and update AP over completed tasks
             final_rate, ap_completed = logger.on_task_end(task_name)
