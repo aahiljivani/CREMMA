@@ -5,13 +5,18 @@ import time
 
 class ContinualLogger:
     def __init__(self, project, config, run_name=None, enable_wandb=True, entity=None, num_envs=1):
+        self.enable_wandb = enable_wandb
+        self.num_envs = int(num_envs)
+        self.global_step = 0
         self.regret_sum = 0.0
         self.regret_steps = 0
         self._last_ap = None
+        self.run = None
+        self.start_time = time.time()
         # per-task episodic success tracking (reset each task)
         self._task_episodes = 0
         self._task_successes = 0
-        # frozen diagonal p_tau(tau): learning performance, NOT AP
+        # frozen diagonal p_tau(tau): learning perf, NOT AP
         self._completed_task_diag: dict = {}
         if self.enable_wandb:
             self.run = wandb.init(project=project, entity=entity, name=run_name, config=config)
