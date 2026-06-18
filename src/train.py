@@ -34,7 +34,7 @@ class ContinualBenchVecEnv:
         self.single_task_name = cfg.get("single_task_name", None)
         self.vec_env_cls = self._resolve_vec_env_cls(cfg.vec_env_cls)
         self.train_episodes_per_task = int(cfg.train.episodes_per_task)
-        self.eval_every_steps = int(cfg.eval.eval_every_steps)
+        self.eval_video_steps = int(cfg.eval.eval_video_steps)
         self.num_eval_episodes = int(cfg.eval.num_eval_episodes)
 
     @staticmethod
@@ -120,6 +120,27 @@ class ContinualBenchVecEnv:
         eval_env.close()
         if frames:
             logger.log_video(task_name, logger.global_step, frames)
+
+    def evaluate_task(self, task_name, agent, n_episodes):
+        # rank offset keeps eval seeds disjoint from the training env seeds
+        eval_env = DummyVecEnv([self._make_single_env(10_000, task_name)])
+        successes = 0
+        for _ in range(n_episodes):
+            obs = eval_env.reset()
+            done = [False]
+            ep_success = False
+            while not done[0]:
+                actions = agent.predict(obs)
+                obs, _, done, infos = eval_env.step(actions)
+                if bool(infos[0].get("success", 0.0)):
+                    ep_success = True
+            successes += int(ep_success)
+        eval_env.close()
+        return successes / max(n_episodes, 1)
+
+    def evaluate_seen_tasks(self, seen_tasks, agent):
+        # current shared policy evaluated on every task seen so far -> p_tau(w)
+        return {t: self.evaluate_task(t, agent, self.num_eval_episodes) for t in seen_tasks}
 
     def train(self):
         # seeding
@@ -240,7 +261,7 @@ class ContinualBenchVecEnv:
                             algorithm_metrics = agent.update(data)
                         logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
 
-                    if logger.run is not None and logger.global_step % int(self.cfg.eval.eval_every_steps) == 0:
+                    if logger.run is not None and logger.global_step % int(self.cfg.eval.eval_video_steps) == 0:
                         self.record_video(task_name, agent, logger)
             vec_env.close()
             logger.on_task_end(task_name)
