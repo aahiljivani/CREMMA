@@ -7,7 +7,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 LOG_STD_MAX = 2
-LOG_STD_MIN = -5
+# R&D Parameters instead of -5
+LOG_STD_MIN = -20
 
 
 class SoftQNetwork(nn.Module):
