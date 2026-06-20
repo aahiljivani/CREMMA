@@ -117,7 +117,7 @@ class ContinualLogger:
     def log_algorithm_metrics(self, metrics, step=None):
         return self.log_metrics(metrics, step=step)
 
-    def log_video(self, task_name: str, ep_idx: int, frames: list):
+    def log_video(self, task_name: str, frames: list):
         if self.run is None:
             return
         video = np.stack(frames)
@@ -132,7 +132,7 @@ class ContinualLogger:
         # wandb.Video expects (T, C, H, W)
         video = video.transpose(0, 3, 1, 2)
         self.run.log({
-            f"eval/video_{task_name}_ep{ep_idx}": wandb.Video(video.astype(np.uint8), fps=30, format="mp4"),
+            f"eval/video_{task_name}": wandb.Video(video.astype(np.uint8), fps=30, format="mp4"),
             "global_step": self.global_step,
         })
 

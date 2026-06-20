@@ -119,7 +119,7 @@ class ContinualBenchVecEnv:
             frames.append(eval_env.envs[0].gym_env.render())
         eval_env.close()
         if frames:
-            logger.log_video(task_name, logger.global_step, frames)
+            logger.log_video(task_name, frames)
 
     def evaluate_task(self, task_name, agent, n_episodes):
         # rank offset keeps eval seeds disjoint from the training env seeds
