@@ -1,0 +1,1154 @@
+ContinualBench env diagnostic
+task=door  num_envs=2  n_steps=10
+================================================================================
+
+
+============================================================
+  DummyVecEnv
+============================================================
+
+--- step 0 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.33747026 0.43762943]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017649981974348274,
+                 'diff_grasp_reward_tcp': 0.017259188218711655,
+                 'diff_own_grasp_fn': 0.017649981974348274,
+                 'grasp_reward': 0.017488142498533654,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.23614591272665314,
+                 'success': 0.0,
+                 'unscaled_reward': 0.06995256999413461},
+    'button': {   'button_pressed': 0.11042195413122116,
+                  'near_button': 0.10141038166967256,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.0934615474804126,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.0},
+    'door': {   'grasp_reward': 0.025818934001141547,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.1434113567377761,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.3374702548990186},
+    'faucet': {   'grasp_reward': 0.18352759928113863,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.1050579320299387},
+    'peg': {   'grasp_reward': 0.0009467207374804421,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2731556053008883,
+               'near_object': 0.0,
+               'obj_to_target': 0.10981183062112586,
+               'success': 0.0,
+               'unscaled_reward': 0.0018934414749608843},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.42581383540127715,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.869320841343982}}
+
+--- step 1 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.50546706 0.5673731 ]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017681537391474045,
+                 'diff_grasp_reward_tcp': 0.017294184446702124,
+                 'diff_own_grasp_fn': 0.017681537391474066,
+                 'grasp_reward': 0.017524413810456503,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2311794990132426,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07009765524182601},
+    'button': {   'button_pressed': 0.11042195413122116,
+                  'near_button': 0.10136662892674418,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.0934615474804126,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.0},
+    'door': {   'grasp_reward': 0.2879239795434715,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.1443373128820554,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.505467048354756},
+    'faucet': {   'grasp_reward': 0.1830233885927622,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.103041089276433},
+    'peg': {   'grasp_reward': 0.0009422812617911644,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27466245200933204,
+               'near_object': 0.0,
+               'obj_to_target': 0.10958567506032539,
+               'success': 0.0,
+               'unscaled_reward': 0.0018845625235823288},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.4262091608732527,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.871115335305973}}
+
+--- step 2 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.4480907  0.51853514]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017711927276159993,
+                 'diff_grasp_reward_tcp': 0.017328871565514173,
+                 'diff_own_grasp_fn': 0.017711927276160024,
+                 'grasp_reward': 0.017560405509573128,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.22744732242336538,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07024162203829251},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.10147266023846309,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.0},
+    'door': {   'grasp_reward': 0.1427976276726658,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.1455499301484639,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.44809071147334223},
+    'faucet': {   'grasp_reward': 0.18342045630370038,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.1046293601201858},
+    'peg': {   'grasp_reward': 0.0009490817777379131,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2758144657611811,
+               'near_object': 0.0,
+               'obj_to_target': 0.10941386883568045,
+               'success': 0.0,
+               'unscaled_reward': 0.0018981635554758262},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.42650436769689454,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.872454654056551}}
+
+--- step 3 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.55873036 0.4764257 ]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017766158949877407,
+                 'diff_grasp_reward_tcp': 0.0173882215764089,
+                 'diff_own_grasp_fn': 0.01776615894987728,
+                 'grasp_reward': 0.01762214396213286,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2249874769785351,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07048857584853144},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.10166690458906245,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.0},
+    'door': {   'grasp_reward': 0.5678845939151934,
+                'grasp_success': 1.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.14797464316743017,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.5587303723782331},
+    'faucet': {   'grasp_reward': 0.1851768454591527,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.111654916741995},
+    'peg': {   'grasp_reward': 0.0009700643969215803,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27661969217863713,
+               'near_object': 0.0,
+               'obj_to_target': 0.10929433798867284,
+               'success': 0.0,
+               'unscaled_reward': 0.0019401287938431606},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.42545222388167736,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8676784325808464}}
+
+--- step 4 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.57124245 0.6052487 ]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.01782543536116921,
+                 'diff_grasp_reward_tcp': 0.017454676137043636,
+                 'diff_own_grasp_fn': 0.017825435361169133,
+                 'grasp_reward': 0.017691246371366234,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2237685276909109,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07076498548546493},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.10184331310888196,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.00454491527750278},
+    'door': {   'grasp_reward': 0.6328530218320583,
+                'grasp_success': 1.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15149432151868708,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.5712424219390857},
+    'faucet': {   'grasp_reward': 0.18736450838973667,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.1204055684643308},
+    'peg': {   'grasp_reward': 0.0009942296315256945,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27719981379447856,
+               'near_object': 0.0,
+               'obj_to_target': 0.10920850443106452,
+               'success': 0.0,
+               'unscaled_reward': 0.001988459263051389},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.42358397935781733,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8591785071750992}}
+
+--- step 5 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.5705085  0.29646274]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017871350822380925,
+                 'diff_grasp_reward_tcp': 0.017509410781106037,
+                 'diff_own_grasp_fn': 0.017871350822380675,
+                 'grasp_reward': 0.017748073143682323,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2233354997795438,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07099229257472929},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.10200345548055552,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.02863606056413379},
+    'door': {   'grasp_reward': 0.572847329120251,
+                'grasp_success': 1.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15493400362658358,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.5705084845491115},
+    'faucet': {   'grasp_reward': 0.18931513882242512,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.1282080901950846},
+    'peg': {   'grasp_reward': 0.001015801965970626,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2776225531625845,
+               'near_object': 0.0,
+               'obj_to_target': 0.10914610470240904,
+               'success': 0.0,
+               'unscaled_reward': 0.002031603931941252},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.421956776753711,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8517553667467426}}
+
+--- step 6 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.5308096 0.6449699]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017891877413134246,
+                 'diff_grasp_reward_tcp': 0.017540225006790266,
+                 'diff_own_grasp_fn': 0.017891877413133608,
+                 'grasp_reward': 0.017779819961890316,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.22315451367007869,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07111927984756126},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.10205059181174761,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.04554691338706711},
+    'door': {   'grasp_reward': 0.3273199407957563,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.1575920096347485,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.5308095738074201},
+    'faucet': {   'grasp_reward': 0.1901197852050685,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.1314266757256581},
+    'peg': {   'grasp_reward': 0.001023777104749514,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27793393023648894,
+               'near_object': 0.0,
+               'obj_to_target': 0.10910022236633712,
+               'success': 0.0,
+               'unscaled_reward': 0.002047554209499028},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.4211218365162681,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8479392412313347}}
+
+--- step 7 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.58765274 0.6545098 ]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.01788707699264656,
+                 'diff_grasp_reward_tcp': 0.017546437796877166,
+                 'diff_own_grasp_fn': 0.017887076992646536,
+                 'grasp_reward': 0.01778577244367719,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.22306553066532944,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07114308977470876},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.10194701064110567,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.05653202660694126},
+    'door': {   'grasp_reward': 0.6685322349955137,
+                'grasp_success': 1.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15909220711910996,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.587652738798691},
+    'faucet': {   'grasp_reward': 0.18954786878959334,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.1291390100637575},
+    'peg': {   'grasp_reward': 0.0010150704983349404,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27815144744019343,
+               'near_object': 0.0,
+               'obj_to_target': 0.10906821041827044,
+               'success': 0.0,
+               'unscaled_reward': 0.002030140996669881},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.42110246643254934,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8478506513987787}}
+
+--- step 8 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.36359215 0.6707652 ]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.01789908205767674,
+                 'diff_grasp_reward_tcp': 0.017566581583950486,
+                 'diff_own_grasp_fn': 0.017899082057676704,
+                 'grasp_reward': 0.017806366487388293,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.22301776014859978,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07122546594955317},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.1017734214554618,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.05774755628018089},
+    'door': {   'grasp_reward': 0.04358963902596935,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15915264415413663,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.36359214734404655},
+    'faucet': {   'grasp_reward': 0.18900812677925755,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.1269800420224143},
+    'peg': {   'grasp_reward': 0.0010054387456857586,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2782997289745159,
+               'near_object': 0.0,
+               'obj_to_target': 0.10904640661884707,
+               'success': 0.0,
+               'unscaled_reward': 0.002010877491371517},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.42047885860777867,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.844997146310711}}
+
+--- step 9 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.51929355 0.56864107]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.0179493656618806,
+                 'diff_grasp_reward_tcp': 0.017620483702525298,
+                 'diff_own_grasp_fn': 0.0179493656618808,
+                 'grasp_reward': 0.017862427259334665,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2229910838951379,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07144970903733866},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.1016009719269685,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.02324503182433142},
+    'door': {   'grasp_reward': 0.28807667908143975,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15732382610733708,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.5192935226879083},
+    'faucet': {   'grasp_reward': 0.18931660878948944,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.128213970063342},
+    'peg': {   'grasp_reward': 0.0010041645873134677,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2784013503009417,
+               'near_object': 0.0,
+               'obj_to_target': 0.10903147265639798,
+               'success': 0.0,
+               'unscaled_reward': 0.0020083291746269354},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.4186333935521136,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.836536607515772}}
+
+
+============================================================
+  SubprocVecEnv
+============================================================
+
+--- step 0 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.36490149 0.51963743]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017650626802656062,
+                 'diff_grasp_reward_tcp': 0.017260557520422153,
+                 'diff_own_grasp_fn': 0.017650626802656062,
+                 'grasp_reward': 0.017489525717956592,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.23614591272665314,
+                 'success': 0.0,
+                 'unscaled_reward': 0.06995810287182637},
+    'button': {   'button_pressed': 0.11042195413122116,
+                  'near_button': 0.10136867666721285,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.0934615474804126,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.0},
+    'door': {   'grasp_reward': 0.045934198475818255,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.14404713782073622,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.3649014878946541},
+    'faucet': {   'grasp_reward': 0.18343667173401185,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.1046942218414315},
+    'peg': {   'grasp_reward': 0.0009445927170042621,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2731556053008883,
+               'near_object': 0.0,
+               'obj_to_target': 0.10981183062112586,
+               'success': 0.0,
+               'unscaled_reward': 0.0018891854340085243},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.42558047959648926,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8682610632680254}}
+
+--- step 1 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.5652983  0.53161522]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017685427010899785,
+                 'diff_grasp_reward_tcp': 0.017301397440072617,
+                 'diff_own_grasp_fn': 0.017685427010899847,
+                 'grasp_reward': 0.017531698705440663,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2311794990132426,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07012679482176265},
+    'button': {   'button_pressed': 0.11042195413122116,
+                  'near_button': 0.1011063730458909,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.0934615474804126,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.0},
+    'door': {   'grasp_reward': 0.6521239388527859,
+                'grasp_success': 1.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.14696790647640345,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.5652982971864221},
+    'faucet': {   'grasp_reward': 0.18230057174112155,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.1001498218698704},
+    'peg': {   'grasp_reward': 0.0009284070151208424,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27466245200933204,
+               'near_object': 0.0,
+               'obj_to_target': 0.10958567506032539,
+               'success': 0.0,
+               'unscaled_reward': 0.0018568140302416848},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.4250176707766771,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8657035249840974}}
+
+--- step 2 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.54902591 0.55199018]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.01771952719546276,
+                 'diff_grasp_reward_tcp': 0.01734299091308404,
+                 'diff_own_grasp_fn': 0.017719527195462683,
+                 'grasp_reward': 0.01757457503477172,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.22744732242336538,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07029830013908688},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.1007636831313289,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.005958455410702938},
+    'door': {   'grasp_reward': 0.46613910948896886,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15018959550346112,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.5490259061101896},
+    'faucet': {   'grasp_reward': 0.1811143758392222,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.095405038262273},
+    'peg': {   'grasp_reward': 0.0009094614544055237,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2758144657611811,
+               'near_object': 0.0,
+               'obj_to_target': 0.10941386883568045,
+               'success': 0.0,
+               'unscaled_reward': 0.0018189229088110474},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.42382441364080864,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8602737735919233}}
+
+--- step 3 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.55538935 0.56024431]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.01775986543935552,
+                 'diff_grasp_reward_tcp': 0.01739069447707273,
+                 'diff_own_grasp_fn': 0.017759865439355985,
+                 'grasp_reward': 0.017623844006468187,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2249874769785351,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07049537602587275},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.10044085041218619,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.016222598517388352},
+    'door': {   'grasp_reward': 0.4857331935885706,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15253825496519155,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.5553893476984157},
+    'faucet': {   'grasp_reward': 0.18035625689866427,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.0923725625000413},
+    'peg': {   'grasp_reward': 0.0008949739000352725,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27661969217863713,
+               'near_object': 0.0,
+               'obj_to_target': 0.10929433798867284,
+               'success': 0.0,
+               'unscaled_reward': 0.001789947800070545},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.4221553552688991,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8526622567477204}}
+
+--- step 4 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.46893298 0.55142823]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.01779419637306258,
+                 'diff_grasp_reward_tcp': 0.01743391716880353,
+                 'diff_own_grasp_fn': 0.017794196373062357,
+                 'grasp_reward': 0.01766837412584354,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2237685276909109,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07067349650337416},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.10009100580723775,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.00929365834867184},
+    'door': {   'grasp_reward': 0.16987815726708844,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.1547009032261022,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.4689329770121102},
+    'faucet': {   'grasp_reward': 0.17958050467761225,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.0892695536158332},
+    'peg': {   'grasp_reward': 0.0008793098282594535,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27719981379447856,
+               'near_object': 0.0,
+               'obj_to_target': 0.10920850443106452,
+               'success': 0.0,
+               'unscaled_reward': 0.001758619656518907},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.42026835949978936,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.844033326349205}}
+
+--- step 5 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.60541574 0.54137352]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017836600055173988,
+                 'diff_grasp_reward_tcp': 0.01748570963617774,
+                 'diff_own_grasp_fn': 0.01783660005517445,
+                 'grasp_reward': 0.01772179927110176,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2233354997795438,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07088719708440704},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.09966658162475311,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.002136172858360133},
+    'door': {   'grasp_reward': 0.9566645097778552,
+                'grasp_success': 1.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15745711951135635,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.605415740596636},
+    'faucet': {   'grasp_reward': 0.1788909654111673,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.0865113965500535},
+    'peg': {   'grasp_reward': 0.0008620109684741918,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2776225531625845,
+               'near_object': 0.0,
+               'obj_to_target': 0.10914610470240904,
+               'success': 0.0,
+               'unscaled_reward': 0.0017240219369483835},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.41756514390429,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.831628215114423}}
+
+--- step 6 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.46874657 0.47734058]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017875716922849474,
+                 'diff_grasp_reward_tcp': 0.017533338090227495,
+                 'diff_own_grasp_fn': 0.017875716922849044,
+                 'grasp_reward': 0.017770907668260692,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.22315451367007869,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07108363067304277},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.09923263626117935,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.010802347322560482},
+    'door': {   'grasp_reward': 0.16470558239569633,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15895118041891074,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.46874656519386737},
+    'faucet': {   'grasp_reward': 0.17801575616269205,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.0830105595561523},
+    'peg': {   'grasp_reward': 0.0008429006556598741,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27793393023648894,
+               'near_object': 0.0,
+               'obj_to_target': 0.10910022236633712,
+               'success': 0.0,
+               'unscaled_reward': 0.0016858013113197482},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.4150635363561824,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8201021404902207}}
+
+--- step 7 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.4241299  0.55560448]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017883883485276367,
+                 'diff_grasp_reward_tcp': 0.017550928207478642,
+                 'diff_own_grasp_fn': 0.017883883485275944,
+                 'grasp_reward': 0.017788593579469554,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.22306553066532944,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07115437431787822},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.09880817618383687,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.0},
+    'door': {   'grasp_reward': 0.10077960523179996,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.15877373313645854,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.4241299012945365},
+    'faucet': {   'grasp_reward': 0.17632123018348306,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.0762324556393164},
+    'peg': {   'grasp_reward': 0.0008169257174713858,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.27815144744019343,
+               'near_object': 0.0,
+               'obj_to_target': 0.10906821041827044,
+               'success': 0.0,
+               'unscaled_reward': 0.0016338514349427717},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.4139036200658896,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.814742737841083}}
+
+--- step 8 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.48872403 0.53696534]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.01787338707136453,
+                 'diff_grasp_reward_tcp': 0.01755005991922865,
+                 'diff_own_grasp_fn': 0.017873387071364336,
+                 'grasp_reward': 0.017786977435571463,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.22301776014859978,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07114790974228585},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.09839413966233572,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.0},
+    'door': {   'grasp_reward': 0.20625663883884582,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.1573278279211023,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.4887240266853633},
+    'faucet': {   'grasp_reward': 0.17415597668601096,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.067571441649428},
+    'peg': {   'grasp_reward': 0.0007875499544371388,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2782997289745159,
+               'near_object': 0.0,
+               'obj_to_target': 0.10904640661884707,
+               'success': 0.0,
+               'unscaled_reward': 0.0015750999088742776},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.4135583650412012,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8131456275967675}}
+
+--- step 9 ---
+  obs shape            : (2, 26)
+  actions shape        : (2, 4)
+  rewards              : [0.50620816 0.55699464]
+  dones                : [False False]
+  info keys [env 0]    : ['button', 'door', 'window', 'faucet', 'peg', 'block', 'success', 'TimeLimit.truncated']
+  top-level success    : [0.0, 0.0]
+  nested task success  : [0.0, 0.0]
+  TimeLimit.truncated  : [False, False]
+  full infos[0]:
+{   'TimeLimit.truncated': False,
+    'block': {   'diff_grasp_reward_pad': 0.017858993987898475,
+                 'diff_grasp_reward_tcp': 0.017544463283170737,
+                 'diff_own_grasp_fn': 0.017858993987898322,
+                 'grasp_reward': 0.017780498931599442,
+                 'grasp_success': 0.0,
+                 'near_object': 0.0,
+                 'obj_to_target': 0.2229910838951379,
+                 'success': 0.0,
+                 'unscaled_reward': 0.07112199572639777},
+    'button': {   'button_pressed': 0.11042195413122127,
+                  'near_button': 0.09806816049547944,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.09346154748041258,
+                  'success': 0.0,
+                  'tcp_open': 1.0,
+                  'unscaled_reward': 0.0},
+    'door': {   'grasp_reward': 0.2547595393596225,
+                'grasp_success': 0.0,
+                'in_place_reward': 0.03659146795813686,
+                'near_object': 0.1551964472085159,
+                'obj_to_target': 0.49072162917252626,
+                'success': 0.0,
+                'unscaled_reward': 0.5062081560505604},
+    'faucet': {   'grasp_reward': 0.17223920200107687,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.06182458915089736,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.2583572010810512,
+                  'success': 0.0,
+                  'unscaled_reward': 1.0599043429096917},
+    'peg': {   'grasp_reward': 0.0007626730354614363,
+               'grasp_success': 0.0,
+               'in_place_reward': 0.2784013503009417,
+               'near_object': 0.0,
+               'obj_to_target': 0.10903147265639798,
+               'success': 0.0,
+               'unscaled_reward': 0.0015253460709228725},
+    'success': 0.0,
+    'window': {   'grasp_reward': 0.4136203088905462,
+                  'grasp_success': 1.0,
+                  'in_place_reward': 0.46801116545527616,
+                  'near_object': 0.0,
+                  'obj_to_target': 0.20992428237816563,
+                  'success': 0.0,
+                  'unscaled_reward': 2.8134322355248864}}
+

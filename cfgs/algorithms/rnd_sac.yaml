@@ -1,0 +1,8 @@
+cl_reg_coef: 1.0
+expert_buffer_size: 10_000
+replay_buffer_size: int(1e6)
+nepochs_offline: 5
+env_seq: None
+bc_kl: 'reverse'
+distill_kl: 'forward'
+reset_offline_actor: False

@@ -14,13 +14,13 @@ from omegaconf import OmegaConf
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from continual_bench.envs import ContinualBenchEnv
 from shimmy.openai_gym_compatibility import GymV21CompatibilityV0
-
+import torch
+import torch.optim as optim
 from .cfg import parse_cfg
 from .logger import ContinualLogger
-from src.algorithms import DDPG, RandomPolicy, SAC
-import torch
-from stable_baselines3.common.buffers import ReplayBuffer
-import torch.optim as optim
+from src.algorithms import DDPG, RandomPolicy, SAC, RND_SAC
+from src.buffer import ReplayBuffer, ExpertBuffer
+
 
 
 
@@ -36,6 +36,8 @@ class ContinualBenchVecEnv:
         self.train_episodes_per_task = int(cfg.train.episodes_per_task)
         self.eval_video_steps = int(cfg.eval.eval_video_steps)
         self.num_eval_episodes = int(cfg.eval.num_eval_episodes)
+        self.replay_buffer_enabled = cfg.replay_buffer_enabled
+        self.expert_buffer_enabled = cfg.expert_buffer_enabled
 
     @staticmethod
     def _resolve_vec_env_cls(vec_env_name: str):
@@ -100,14 +102,14 @@ class ContinualBenchVecEnv:
     def _build_policy(self, env, num_envs: int): # building SAC and PPO policies soon.
         if self.cfg.policy == "RandomPolicy":
             return RandomPolicy(env.action_space, num_envs)
-        if self.cfg.policy == "DDPG":
+        elif self.cfg.policy == "DDPG":
             return DDPG(self.cfg, env).reset()
-        if self.cfg.policy == "SAC":
+        elif self.cfg.policy == "SAC":
             return SAC(self.cfg, env).reset()
-        # if self.cfg.policy == "PPO":
-        #     return PPO(self.cfg, env).reset()
-        raise ValueError(f"Unsupported policy={self.cfg.policy}")
-
+        elif self.cfg.policy == "RND_SAC":
+            return RND_SAC(self.cfg, env).reset()
+        else:
+            raise ValueError(f"Unsupported policy={self.cfg.policy}")
     def record_video(self, task_name, agent, logger):
         eval_env = DummyVecEnv([self._make_single_env(0, task_name, render_mode="rgb_array")])
         obs = eval_env.reset()
@@ -158,20 +160,12 @@ class ContinualBenchVecEnv:
         first_env = vec_envs[training_order[0]]
         # building the policy will come from intitializing the agent first. i.e. calling SAC.reset()
         agent = self._build_policy(first_env, num_envs=self.num_envs)
-        # does our policy need a replay buffer?
-        replay_buffer_enabled = bool(self.cfg.get("replay_buffer", False))
+        # what type of buffer do we need?
+        buffer_type = self.cfg.buffer_type
         # random action sampling until the learning starts
         learning_starts = int(self.cfg.get("learning_starts", 0))
-        if replay_buffer_enabled:
-            first_env.observation_space.dtype = np.float32
-            rb = ReplayBuffer(
-                self.cfg.buffer_size,
-                first_env.observation_space,
-                first_env.action_space,
-                self.cfg.device,
-                n_envs=self.num_envs,
-                handle_timeout_termination=False,
-            )
+        if self.replay_buffer_enabled:
+            rb = ReplayBuffer(cfg=self.cfg, env=first_env)
 
         # logging CRL specific metrics here.
         run_name = f"{self.cfg.policy}_{self.cfg.benchmark_mode}_{self.num_envs}env_seed{self.seed}"
@@ -189,6 +183,8 @@ class ContinualBenchVecEnv:
         for task_idx, task_name in enumerate(training_order):
             vec_env = vec_envs[task_name]
             max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
+            if self.replay_buffer_enabled:
+                rb.reset()
             # load weights from previous task before starting training on this one
             if task_idx > 0 and hasattr(agent, "load"):
                 agent.load(str(save_dir))
@@ -216,13 +212,13 @@ class ContinualBenchVecEnv:
                     )
                     # if both done and success then the episode is terminated or if just done is true as well
                     terminated = np.logical_and(dones, successes.astype(bool))
-                    #SB3 terminal observation handling not relevant in continualbench
+                    
                     real_next_obs = next_obs.copy()
                     for idx, done in enumerate(dones):
                         if done:
                             real_next_obs[idx] = infos[idx]["terminal_observation"]
-                    if replay_buffer_enabled:
-                        rb.add(obs, real_next_obs, actions, rewards, terminated, infos)
+                    if self.replay_buffer_enabled:
+                        rb.add(obs, actions, rewards, terminated, real_next_obs)
 
                     obs = next_obs
                     # more logging of CRL metrics
@@ -245,14 +241,14 @@ class ContinualBenchVecEnv:
                         )
                         logger.on_episode_end(
                             task_name=task_name,
-                            success=bool(infos[idx]["success"]),
+                            success=bool(infos[idx].get("success", False)),
                             episode_length=int(episode_lengths[idx]),
                         )
                         episode_returns[idx] = 0.0
                         episode_lengths[idx] = 0
 
                     if (
-                        replay_buffer_enabled
+                        self.replay_buffer_enabled
                         and logger.global_step > learning_starts
                         and hasattr(agent, "update")
                     ):

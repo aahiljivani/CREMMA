@@ -1,3 +1,5 @@
+replay_buffer_enabled: True
+expert_buffer_enabled: False
 domain: sequential
 benchmark_mode: continual
 task_list:
