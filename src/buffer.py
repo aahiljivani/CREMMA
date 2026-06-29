@@ -6,39 +6,43 @@ class ExpertBuffer:
         self.expert_buffer_size = cfg.expert_buffer_size
         self.tasks = cfg.task_list
         self.env = env
-        self.policy = policy
         self.device = cfg.device
-        self.observations = np.zeros((self.expert_buffer_size, *self.env.observation_space.shape), dtype=np.float32)
-        self.actions = np.zeros((self.expert_buffer_size, *self.env.action_space.shape), dtype=np.float32)
-        self.rewards = np.zeros((self.expert_buffer_size,1), dtype=np.float32)
-        self.dones = np.zeros((self.expert_buffer_size,1), dtype=np.float32)
-        self.next_observations = np.zeros((self.expert_buffer_size, *self.env.observation_space.shape), dtype=np.float32)
-        self.size = 0
-        self.pointer = 0
+        self.tasks = []
+        self.observation_buffer = []
+        self.target_mean_buffer = []
+        self.target_log_std_buffer = []
+        self.task_idx_buffer = []
+    
 
-        def add(self, observations, task):
-            BATCH_SIZE = 64
+    def add_observation_batch(self, observations, policy, task_name):
+        """Add a EpisodeBatch to the buffer.
+
+        Args:
+            episodes (EpisodeBatch): Episodes to add.
+
+        """
+        assert len(observations) == self.expert_buffer_size
+        self.tasks.append(task_name)
+        BATCH_SIZE = 64
         
-            means = []
-            log_stds = []
+        means = []
+        log_stds = []
 
-            for i in range(0,len(observations),BATCH_SIZE):
-                start = i
-                if i+BATCH_SIZE > len(observations):
-                    end = len(observations)
-                else:
-                    end = i+BATCH_SIZE
-                with torch.no_grad():
-                    # sample actions from observation batch
-                    action_info = self.policy(observations[start:end], task)[1]
-                    mean, log_std = action_info['mean'], action_info['log_std']
-                    means.append(mean)
-                    log_stds.append(log_std)
+        for i in range(0,len(observations),BATCH_SIZE):
+            start = i
+            if i+BATCH_SIZE > len(observations):
+                end = len(observations)
+            else:
+                end = i+BATCH_SIZE
+            with torch.no_grad():
+                mean, log_std = policy(observations[start:end])
+                means.append(mean)
+                log_stds.append(log_std)
         
         mean_targets = torch.cat(means)
         log_std_targets = torch.cat(log_stds)
 
-        if self._per_task:
+        if len(self.tasks)>=1:
             self.observation_buffer.append(observations)
             self.target_mean_buffer.append(mean_targets)
             self.target_log_std_buffer.append(log_std_targets)
@@ -55,10 +59,7 @@ class ExpertBuffer:
                 self.task_idx_buffer = torch.cat([self.task_idx_buffer, torch.tensor([seq_idx]*self._capacity_per_task)])
 
         self._capacity += self._capacity_per_task
-
-
-        
-
+    
 
 
 class ReplayBuffer:
