@@ -84,7 +84,6 @@ class SAC:
         self.gamma = cfg.gamma
         self.tau = cfg.tau
         self.batch_size = cfg.batch_size
-        self.buffer_size = cfg.buffer_size
         self.learning_starts = cfg.learning_starts
         self.policy_frequency = cfg.policy_frequency
         self.target_network_frequency = cfg.target_network_frequency

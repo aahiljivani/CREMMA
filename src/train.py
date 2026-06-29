@@ -160,8 +160,7 @@ class ContinualBenchVecEnv:
         first_env = vec_envs[training_order[0]]
         # building the policy will come from intitializing the agent first. i.e. calling SAC.reset()
         agent = self._build_policy(first_env, num_envs=self.num_envs)
-        # what type of buffer do we need?
-        buffer_type = self.cfg.buffer_type
+        # maybe we need a buffer type?
         # random action sampling until the learning starts
         learning_starts = int(self.cfg.get("learning_starts", 0))
         if self.replay_buffer_enabled:

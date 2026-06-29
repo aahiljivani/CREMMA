@@ -69,21 +69,23 @@ class ReplayBuffer:
         self.env = env
         self.observations = np.zeros((self.replay_buffer_size, *self.env.observation_space.shape), dtype=np.float32)
         self.actions = np.zeros((self.replay_buffer_size, *self.env.action_space.shape), dtype=np.float32)
-        self.rewards = np.zeros((self.replay_buffer_size,1), dtype=np.float32)
-        self.dones = np.zeros((self.replay_buffer_size,1), dtype=np.float32)
+        self.rewards = np.zeros((self.replay_buffer_size,), dtype=np.float32)
+        self.dones = np.zeros((self.replay_buffer_size,), dtype=np.float32)
         self.next_observations = np.zeros((self.replay_buffer_size, *self.env.observation_space.shape), dtype=np.float32)
         self.size = 0
         self.pointer = 0
         self.device = cfg.device
+        self.num_envs = cfg.num_envs
     
     def add(self,observation, action, reward, done, next_observation):
-        self.observations[self.pointer] = observation
-        self.actions[self.pointer] = action
-        self.rewards[self.pointer] = reward
-        self.dones[self.pointer] = done
-        self.next_observations[self.pointer] = next_observation
-        self.pointer = (self.pointer + 1) % self.replay_buffer_size
-        self.size = min(self.size + 1, self.replay_buffer_size)
+    
+        self.observations[self.pointer: self.pointer + self.num_envs] = observation
+        self.actions[self.pointer: self.pointer + self.num_envs] = action
+        self.rewards[self.pointer: self.pointer + self.num_envs] = reward
+        self.dones[self.pointer: self.pointer + self.num_envs] = done
+        self.next_observations[self.pointer: self.pointer + self.num_envs] = next_observation
+        self.pointer = (self.pointer + self.num_envs) % self.replay_buffer_size
+        self.size = min(self.size + self.num_envs, self.replay_buffer_size)
         
     
     def reset(self):

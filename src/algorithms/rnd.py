@@ -1,3 +1,4 @@
+from .sac import SAC
 class RND_SAC(SAC):
     def __init__(self, cfg, env):
         super().__init__(cfg, env)
