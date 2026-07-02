@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
+from gym.spaces import Box
 from omegaconf import OmegaConf
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from continual_bench.envs import ContinualBenchEnv
@@ -25,6 +26,8 @@ from src.buffer import ReplayBuffer, ExpertBuffer
 
 
 class ContinualBenchVecEnv:
+    GCRL_GOAL_DIM = 4
+
     def __init__(self, cfg):
         self.cfg = cfg
         self.seed = int(cfg.seed)
@@ -38,6 +41,8 @@ class ContinualBenchVecEnv:
         self.num_eval_episodes = int(cfg.eval.num_eval_episodes)
         self.replay_buffer_enabled = cfg.replay_buffer_enabled
         self.expert_buffer_enabled = cfg.expert_buffer_enabled
+        self.gcrl = bool(cfg.get("gcrl", False))
+        self.target_pos = dict()
 
     @staticmethod
     def _resolve_vec_env_cls(vec_env_name: str):
@@ -62,6 +67,49 @@ class ContinualBenchVecEnv:
             wrapped_env.max_path_length = env.max_path_length
             return wrapped_env
         return _init
+
+    def _compute_goal_vector(self, task_name: str) -> np.ndarray:
+        env = ContinualBenchEnv(seed=self.seed)
+        env.set_task(task_name)
+        env.reset()
+        target_pos = env.init_data[env.task_spec.name].target_pos.astype(np.float32)
+        door_angle = np.pi / 2 + np.pi / 6 if task_name == "door" else 0.0
+        goal = np.concatenate(
+            [target_pos, np.array([door_angle], dtype=np.float32)]
+        ).astype(np.float32)
+        env.close()
+        return goal
+
+    def _ensure_goal_vector(self, task_name: str) -> np.ndarray:
+        if task_name not in self.target_pos:
+            self.target_pos[task_name] = self._compute_goal_vector(task_name)
+        return self.target_pos[task_name]
+
+    def _augment_obs(self, task_name: str, obs: np.ndarray) -> np.ndarray:
+        if not self.gcrl:
+            return obs
+        goal = self._ensure_goal_vector(task_name)
+        goals = np.repeat(goal[None, :], obs.shape[0], axis=0)
+        return np.concatenate([obs, goals], axis=1).astype(np.float32)
+
+    def _augment_terminal_obs(self, task_name: str, terminal_obs: np.ndarray) -> np.ndarray:
+        if not self.gcrl:
+            return terminal_obs
+        goal = self._ensure_goal_vector(task_name)
+        return np.concatenate([terminal_obs, goal]).astype(np.float32)
+
+    def _expand_observation_space(self, vec_env):
+        if not self.gcrl:
+            return vec_env
+        obs_space = vec_env.observation_space
+        low = np.concatenate(
+            [obs_space.low, np.full(self.GCRL_GOAL_DIM, -np.inf, dtype=np.float32)]
+        )
+        high = np.concatenate(
+            [obs_space.high, np.full(self.GCRL_GOAL_DIM, np.inf, dtype=np.float32)]
+        )
+        vec_env.observation_space = Box(low=low, high=high, dtype=np.float32)
+        return vec_env
 
     def _build_training_order(self) -> List[str]:
         '''
@@ -95,8 +143,11 @@ class ContinualBenchVecEnv:
          '''
         vec_envs = {}
         for task_name in self._build_training_order():
+            if self.gcrl:
+                self._ensure_goal_vector(task_name)
             env_fns = [self._make_single_env(i, task_name) for i in range(self.num_envs)]
             vec_envs[task_name] = self.vec_env_cls(env_fns, start_method="spawn")
+            self._expand_observation_space(vec_envs[task_name])
         return vec_envs
 
     def _build_policy(self, env, num_envs: int): # building SAC and PPO policies soon.
@@ -112,12 +163,15 @@ class ContinualBenchVecEnv:
             raise ValueError(f"Unsupported policy={self.cfg.policy}")
     def record_video(self, task_name, agent, logger):
         eval_env = DummyVecEnv([self._make_single_env(0, task_name, render_mode="rgb_array")])
+        self._expand_observation_space(eval_env)
         obs = eval_env.reset()
+        obs = self._augment_obs(task_name, obs)
         done = [False]
         frames = []
         while not done[0]:
             actions = agent.predict(obs)
             obs, _, done, _ = eval_env.step(actions)
+            obs = self._augment_obs(task_name, obs)
             frames.append(eval_env.envs[0].gym_env.render())
         eval_env.close()
         if frames:
@@ -126,14 +180,17 @@ class ContinualBenchVecEnv:
     def evaluate_task(self, task_name, agent, n_episodes):
         # rank offset keeps eval seeds disjoint from the training env seeds
         eval_env = DummyVecEnv([self._make_single_env(10_000, task_name)])
+        self._expand_observation_space(eval_env)
         successes = 0
         for _ in range(n_episodes):
             obs = eval_env.reset()
+            obs = self._augment_obs(task_name, obs)
             done = [False]
             ep_success = False
             while not done[0]:
                 actions = agent.predict(obs)
                 obs, _, done, infos = eval_env.step(actions)
+                obs = self._augment_obs(task_name, obs)
                 if bool(infos[0].get("success", 0.0)):
                     ep_success = True
             successes += int(ep_success)
@@ -191,6 +248,7 @@ class ContinualBenchVecEnv:
 
             for ep in range(int(self.train_episodes_per_task)):
                 obs = vec_env.reset() # reset the vec env
+                obs = self._augment_obs(task_name, obs)
                 episode_returns = np.zeros(vec_env.num_envs, dtype=np.float32)
                 episode_lengths = np.zeros(vec_env.num_envs, dtype=np.int32)
 
@@ -203,6 +261,7 @@ class ContinualBenchVecEnv:
                     # HERE
                         actions = agent.predict(obs)
                     next_obs, rewards, dones, infos = vec_env.step(actions)
+                    next_obs = self._augment_obs(task_name, next_obs)
                     episode_returns += rewards
                     episode_lengths += 1
                     successes = np.array(
@@ -215,7 +274,9 @@ class ContinualBenchVecEnv:
                     real_next_obs = next_obs.copy()
                     for idx, done in enumerate(dones):
                         if done:
-                            real_next_obs[idx] = infos[idx]["terminal_observation"]
+                            real_next_obs[idx] = self._augment_terminal_obs(
+                                task_name, infos[idx]["terminal_observation"]
+                            )
                     if self.replay_buffer_enabled:
                         rb.add(obs, actions, rewards, terminated, real_next_obs)
 

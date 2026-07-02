@@ -15,6 +15,7 @@ seed: 0
 num_envs: 10
 vec_env_cls: SubprocVecEnv
 single_task_name: null
+gcrl: true
 
 logging:
   project: continual-bench
