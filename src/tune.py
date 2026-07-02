@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import optuna
 import torch
+import wandb
 from omegaconf import OmegaConf
 
 from src.buffer import ReplayBuffer
@@ -44,7 +45,7 @@ def build_cfg(params: dict, n_episodes: int = N_TUNE_EPISODES) -> OmegaConf:
     return base
 
 
-def train_for_hpo(cfg) -> float:
+def train_for_hpo(cfg, trial_number: int, params: dict) -> float:
     """Run a condensed training pass on `block` and return its success rate."""
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -53,54 +54,112 @@ def train_for_hpo(cfg) -> float:
 
     cfg.device = "cuda" if torch.cuda.is_available() and cfg.cuda else "cpu"
 
+    wandb_config = OmegaConf.to_container(cfg, resolve=True)
+    wandb_config["trial_number"] = trial_number
+    wandb_config["sampled_hyperparameters"] = params
+    run = wandb.init(
+        project=cfg.logging.project,
+        entity=cfg.logging.get("wandb_entity", None),
+        name=f"sac_{TASK}_hpo_trial_{trial_number}",
+        config=wandb_config,
+        reinit=True,
+    )
+    run.define_metric("global_step")
+    run.define_metric("*", step_metric="global_step")
+    wandb.log(
+        {
+            "global_step": 0,
+            "trial/number": trial_number,
+            **{f"hparams/{key}": value for key, value in params.items()},
+        }
+    )
+
     bench = ContinualBenchVecEnv(cfg)
-    vec_envs = bench.make_envs()           # {TASK: VecEnv}
-    vec_env = vec_envs[TASK]
+    vec_envs = None
+    try:
+        vec_envs = bench.make_envs()           # {TASK: VecEnv}
+        vec_env = vec_envs[TASK]
 
-    agent = bench._build_policy(vec_env, num_envs=bench.num_envs)
-    rb = ReplayBuffer(cfg=cfg, env=vec_env)
+        agent = bench._build_policy(vec_env, num_envs=bench.num_envs)
+        rb = ReplayBuffer(cfg=cfg, env=vec_env)
 
-    learning_starts = int(cfg.get("learning_starts", 0))
-    max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
+        learning_starts = int(cfg.get("learning_starts", 0))
+        max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
 
-    global_step = 0
-    for _ in range(bench.train_episodes_per_task):
-        obs = vec_env.reset()
-        obs = bench._augment_obs(TASK, obs)
-        for _ in range(max_episode_steps):
-            if global_step < learning_starts:
-                actions = np.array(
-                    [vec_env.action_space.sample() for _ in range(vec_env.num_envs)]
-                )
-            else:
-                actions = agent.predict(obs)
-
-            next_obs, rewards, dones, infos = vec_env.step(actions)
-            next_obs = bench._augment_obs(TASK, next_obs)
-            global_step += vec_env.num_envs
-
-            successes = np.array(
-                [float(info["success"]) for info in infos], dtype=np.float32
-            )
-            terminated = np.logical_and(dones, successes.astype(bool))
-
-            real_next_obs = next_obs.copy()
-            for idx, done in enumerate(dones):
-                if done:
-                    real_next_obs[idx] = bench._augment_terminal_obs(
-                        TASK, infos[idx]["terminal_observation"]
+        global_step = 0
+        for episode_idx in range(bench.train_episodes_per_task):
+            obs = vec_env.reset()
+            obs = bench._augment_obs(TASK, obs)
+            for timestep in range(max_episode_steps):
+                if global_step < learning_starts:
+                    actions = np.array(
+                        [vec_env.action_space.sample() for _ in range(vec_env.num_envs)]
                     )
+                else:
+                    actions = agent.predict(obs)
 
-            rb.add(obs, actions, rewards, terminated, real_next_obs)
-            obs = next_obs
+                next_obs, rewards, dones, infos = vec_env.step(actions)
+                next_obs = bench._augment_obs(TASK, next_obs)
+                global_step += vec_env.num_envs
 
-            if global_step > learning_starts and hasattr(agent, "update"):
-                for _ in range(vec_env.num_envs):
-                    data = rb.sample(cfg.batch_size)
-                    agent.update(data)
+                successes = np.array(
+                    [float(info["success"]) for info in infos], dtype=np.float32
+                )
+                terminated = np.logical_and(dones, successes.astype(bool))
 
-    vec_env.close()
-    return bench.evaluate_task(TASK, agent, N_EVAL_EPISODES)
+                real_next_obs = next_obs.copy()
+                for idx, done in enumerate(dones):
+                    if done:
+                        real_next_obs[idx] = bench._augment_terminal_obs(
+                            TASK, infos[idx]["terminal_observation"]
+                        )
+
+                rb.add(obs, actions, rewards, terminated, real_next_obs)
+                obs = next_obs
+
+                wandb.log(
+                    {
+                        "global_step": global_step,
+                        "trial/number": trial_number,
+                        "train/episode_idx": episode_idx,
+                        "train/timestep": timestep,
+                        "train/mean_reward": float(np.mean(rewards)),
+                        "train/step_success": float(np.mean(successes)),
+                    }
+                )
+
+                if global_step > learning_starts and hasattr(agent, "update"):
+                    for _ in range(vec_env.num_envs):
+                        data = rb.sample(cfg.batch_size)
+                        metrics = agent.update(data)
+                        if metrics:
+                            wandb.log(
+                                {
+                                    "global_step": global_step,
+                                    "trial/number": trial_number,
+                                    **metrics,
+                                }
+                            )
+
+        vec_env.close()
+        final_success = bench.evaluate_task(TASK, agent, N_EVAL_EPISODES)
+        wandb.log(
+            {
+                "global_step": global_step,
+                "trial/number": trial_number,
+                "eval/final_success_rate": final_success,
+            }
+        )
+        run.summary["final_success_rate"] = final_success
+        return final_success
+    finally:
+        if vec_envs is not None:
+            for vec_env in vec_envs.values():
+                try:
+                    vec_env.close()
+                except Exception:
+                    pass
+        run.finish()
 
 
 def sample_sac_params(trial: optuna.Trial) -> dict:
@@ -121,7 +180,7 @@ def sample_sac_params(trial: optuna.Trial) -> dict:
 def objective(trial: optuna.Trial) -> float:
     params = sample_sac_params(trial)
     cfg = build_cfg(params)
-    return train_for_hpo(cfg)
+    return train_for_hpo(cfg, trial.number, params)
 
 
 if __name__ == "__main__":
