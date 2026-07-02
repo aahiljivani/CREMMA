@@ -66,6 +66,7 @@ def train_for_hpo(cfg) -> float:
     global_step = 0
     for _ in range(bench.train_episodes_per_task):
         obs = vec_env.reset()
+        obs = bench._augment_obs(TASK, obs)
         for _ in range(max_episode_steps):
             if global_step < learning_starts:
                 actions = np.array(
@@ -75,6 +76,7 @@ def train_for_hpo(cfg) -> float:
                 actions = agent.predict(obs)
 
             next_obs, rewards, dones, infos = vec_env.step(actions)
+            next_obs = bench._augment_obs(TASK, next_obs)
             global_step += vec_env.num_envs
 
             successes = np.array(
@@ -85,7 +87,9 @@ def train_for_hpo(cfg) -> float:
             real_next_obs = next_obs.copy()
             for idx, done in enumerate(dones):
                 if done:
-                    real_next_obs[idx] = infos[idx]["terminal_observation"]
+                    real_next_obs[idx] = bench._augment_terminal_obs(
+                        TASK, infos[idx]["terminal_observation"]
+                    )
 
             rb.add(obs, actions, rewards, terminated, real_next_obs)
             obs = next_obs
