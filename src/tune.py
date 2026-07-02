@@ -17,9 +17,9 @@ from src.train import ContinualBenchVecEnv
 # Constants — adjust these to trade tuning speed vs. quality
 # ---------------------------------------------------------------------------
 TASK = "block"          # pick-cube analog in this codebase
-N_TUNE_EPISODES = 30    # episodes per trial (vs. 100 in full training)
+N_TUNE_EPISODES = 400    # episodes per trial (vs. 100 in full training)
 N_EVAL_EPISODES = 10    # greedy eval episodes used to score each trial
-N_TUNE_ENVS = 4         # parallel envs per trial (fewer than default 10)
+N_TUNE_ENVS = 10         # parallel envs per trial (fewer than default 10)
 N_TRIALS = 50           # total Optuna trials
 
 
