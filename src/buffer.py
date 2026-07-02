@@ -1,28 +1,33 @@
 import numpy as np 
 import torch
 from types import SimpleNamespace
+
 class ExpertBuffer:
-    def __init__(self, cfg, env, policy):
+    def __init__(self, cfg, env, agent, task_name):
         self.expert_buffer_size = cfg.expert_buffer_size
-        self.tasks = cfg.task_list
+        self.task_list = cfg.task_list
         self.env = env
         self.device = cfg.device
-        self.tasks = []
         self.observation_buffer = []
         self.target_mean_buffer = []
         self.target_log_std_buffer = []
-        self.task_idx_buffer = []
-    
+        self.tasks = []
+        self.task_buffer_size = self.expert_buffer_size// len(self.task_list)
+        self.agent = agent
 
-    def add_observation_batch(self, observations, policy, task_name):
-        """Add a EpisodeBatch to the buffer.
+    def add_observation_batch(self, observations, task_name):
+        """
+        Add a episodic batch to the buffer.
 
         Args:
             episodes (EpisodeBatch): Episodes to add.
+            observations are a numpy array
 
         """
-        assert len(observations) == self.expert_buffer_size
-        self.tasks.append(task_name)
+        
+        assert len(observations) == self.task_buffer_size
+
+        
         BATCH_SIZE = 64
         
         means = []
@@ -35,7 +40,7 @@ class ExpertBuffer:
             else:
                 end = i+BATCH_SIZE
             with torch.no_grad():
-                mean, log_std = policy(observations[start:end])
+                mean, log_std = self.agent.actor.forward(torch.tensor(observations[start:end]).to(self.device))
                 means.append(mean)
                 log_stds.append(log_std)
         
@@ -43,39 +48,25 @@ class ExpertBuffer:
         log_std_targets = torch.cat(log_stds)
 
         if len(self.tasks)>=1:
-            self.observation_buffer.append(observations)
-            self.target_mean_buffer.append(mean_targets)
-            self.target_log_std_buffer.append(log_std_targets)
+            observations = torch.tensor(observations).to(self.device)
+            self.observation_buffer = torch.cat([self.observation_buffer, observations])
+            self.target_mean_buffer = torch.cat([self.target_mean_buffer, mean_targets])
+            self.target_log_std_buffer = torch.cat([self.target_log_std_buffer, log_std_targets])
         else:
-            if self.observation_buffer is None:
-                self.observation_buffer = observations
-                self.target_mean_buffer = mean_targets
-                self.target_log_std_buffer = log_std_targets
-                
-            else:
-                self.observation_buffer=torch.cat([self.observation_buffer, observations])
-                self.target_mean_buffer = torch.cat([self.target_mean_buffer, mean_targets])
-                self.target_log_std_buffer = torch.cat([self.target_log_std_buffer, log_std_targets])
+            self.observation_buffer = torch.tensor(observations).to(self.device)
+            self.target_mean_buffer = mean_targets
+            self.target_log_std_buffer = log_std_targets
+        
+        self.tasks.append(task_name)
 
-    def sample_expert_batch(self, batch_size, task_idx=None):
-        if self._per_task:
-            num_task = len(self.observation_buffer)
-            idx = np.random.randint(self._capacity // num_task, size=batch_size // num_task)
-
-            obs = self.observation_buffer[task_idx][idx]
-            target_means = self.target_mean_buffer[task_idx][idx]
-            target_log_stds = self.target_log_std_buffer[task_idx][idx]
-
-            return obs, target_means, target_log_stds
-
-        else:
-            idx = np.random.randint(self._capacity, size=batch_size)
-            obs = self.observation_buffer[idx]
-            target_means = self.target_mean_buffer[idx]
-            target_log_stds = self.target_log_std_buffer[idx]
-            task_idxs = self.task_idx_buffer[idx]
-            
-            return obs, target_means, target_log_stds, task_idxs
+    def sample_expert_batch(self, batch_size):
+        buffer_size = len(self.tasks) * self.task_buffer_size
+        idx = np.random.randint(buffer_size, size=batch_size)
+        obs = self.observation_buffer[idx]
+        target_means = self.target_mean_buffer[idx]
+        target_log_stds = self.target_log_std_buffer[idx]
+        
+        return obs, target_means, target_log_stds
     
 
 
@@ -112,11 +103,11 @@ class ReplayBuffer:
     def sample(self, batch_size):
         indices = np.random.randint(0, self.size, size=batch_size)
         return SimpleNamespace(
-            observations=torch.from_numpy(self.observations[indices]).to(self.device),
-            actions=torch.from_numpy(self.actions[indices]).to(self.device),
-            rewards=torch.from_numpy(self.rewards[indices]).to(self.device),
-            dones=torch.from_numpy(self.dones[indices]).to(self.device),
-            next_observations=torch.from_numpy(self.next_observations[indices]).to(self.device),
+            observations=torch.tensor(self.observations[indices]).to(self.device),
+            actions=torch.tensor(self.actions[indices]).to(self.device),
+            rewards=torch.tensor(self.rewards[indices]).to(self.device),
+            dones=torch.tensor(self.dones[indices]).to(self.device),
+            next_observations=torch.tensor(self.next_observations[indices]).to(self.device),
         )
 
          
