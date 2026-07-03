@@ -3,6 +3,7 @@ import os
 os.environ.setdefault("MUJOCO_GL", "egl")
 
 import random
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +20,7 @@ from src.train import ContinualBenchVecEnv
 # ---------------------------------------------------------------------------
 TASK = "block"          # pick-cube analog in this codebase
 N_TUNE_EPISODES = 400    # episodes per trial (vs. 100 in full training)
-N_EVAL_EPISODES = 10    # greedy eval episodes used to score each trial
+N_EVAL_EPISODES = 20    # greedy eval episodes used to score each trial
 N_TUNE_ENVS = 10         # parallel envs per trial (fewer than default 10)
 N_TRIALS = 50           # total Optuna trials
 
@@ -38,6 +39,7 @@ def build_cfg(params: dict, n_episodes: int = N_TUNE_EPISODES) -> OmegaConf:
             "num_envs": N_TUNE_ENVS,
             "train": {"episodes_per_task": n_episodes},
             "logging": {"enable_wandb": False},
+            "autotune": True,
             **params,
         }
     )
@@ -62,6 +64,8 @@ def train_for_hpo(cfg, trial_number: int, params: dict) -> float:
         entity=cfg.logging.get("wandb_entity", None),
         name=f"sac_{TASK}_hpo_trial_{trial_number}",
         config=wandb_config,
+        group="sac_block_hpo",
+        job_type="trial",
         reinit=True,
     )
     run.define_metric("global_step")
@@ -87,9 +91,13 @@ def train_for_hpo(cfg, trial_number: int, params: dict) -> float:
         max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
 
         global_step = 0
+        train_successes: list[float] = []
         for episode_idx in range(bench.train_episodes_per_task):
             obs = vec_env.reset()
             obs = bench._augment_obs(TASK, obs)
+            ep_reward = 0.0
+            ep_success = 0.0
+            loss_accum = defaultdict(list)
             for timestep in range(max_episode_steps):
                 if global_step < learning_starts:
                     actions = np.array(
@@ -117,41 +125,53 @@ def train_for_hpo(cfg, trial_number: int, params: dict) -> float:
                 rb.add(obs, actions, rewards, terminated, real_next_obs)
                 obs = next_obs
 
-                wandb.log(
-                    {
-                        "global_step": global_step,
-                        "trial/number": trial_number,
-                        "train/episode_idx": episode_idx,
-                        "train/timestep": timestep,
-                        "train/mean_reward": float(np.mean(rewards)),
-                        "train/step_success": float(np.mean(successes)),
-                    }
-                )
+                ep_reward += float(np.mean(rewards))
+                ep_success = max(ep_success, float(np.mean(successes)))
 
                 if global_step > learning_starts and hasattr(agent, "update"):
                     for _ in range(vec_env.num_envs):
                         data = rb.sample(cfg.batch_size)
                         metrics = agent.update(data)
                         if metrics:
-                            wandb.log(
-                                {
-                                    "global_step": global_step,
-                                    "trial/number": trial_number,
-                                    **metrics,
-                                }
-                            )
+                            for key, value in metrics.items():
+                                if value is not None:
+                                    loss_accum[key].append(value)
+
+            train_successes.append(ep_success)
+            wandb.log(
+                {
+                    "global_step": global_step,
+                    "trial/number": trial_number,
+                    "train/episode_idx": episode_idx,
+                    "train/episode_reward": ep_reward,
+                    "train/episode_success": ep_success,
+                    "train/running_success_rate": float(np.mean(train_successes)),
+                    **{
+                        f"losses/{key}": float(np.mean(values))
+                        for key, values in loss_accum.items()
+                    },
+                }
+            )
 
         vec_env.close()
-        final_success = bench.evaluate_task(TASK, agent, N_EVAL_EPISODES)
+        train_success_rate = float(np.mean(train_successes)) if train_successes else 0.0
+        eval_success_rate = bench.evaluate_task(TASK, agent, N_EVAL_EPISODES)
+        # Score trials on how well the params learn the task: reward both
+        # consistent success *during* training and greedy success at eval.
+        combined_score = 0.5 * train_success_rate + 0.5 * eval_success_rate
         wandb.log(
             {
                 "global_step": global_step,
                 "trial/number": trial_number,
-                "eval/final_success_rate": final_success,
+                "train/success_rate": train_success_rate,
+                "eval/final_success_rate": eval_success_rate,
+                "trial/combined_score": combined_score,
             }
         )
-        run.summary["final_success_rate"] = final_success
-        return final_success
+        run.summary["train_success_rate"] = train_success_rate
+        run.summary["final_success_rate"] = eval_success_rate
+        run.summary["combined_score"] = combined_score
+        return combined_score
     finally:
         if vec_envs is not None:
             for vec_env in vec_envs.values():
@@ -164,16 +184,15 @@ def train_for_hpo(cfg, trial_number: int, params: dict) -> float:
 
 def sample_sac_params(trial: optuna.Trial) -> dict:
     return {
-        "policy_lr": trial.suggest_float("policy_lr", 1e-5, 1e-3, log=True),
-        "q_lr": trial.suggest_float("q_lr", 1e-5, 1e-3, log=True),
-        "gamma": trial.suggest_float("gamma", 0.9, 0.999, step=0.001),
-        "tau": trial.suggest_float("tau", 0.001, 0.01, step=0.001),
-        "batch_size": trial.suggest_int("batch_size", 32, 256, step=32),
-        "learning_starts": trial.suggest_int("learning_starts", 1000, 10000, step=1000),
-        "policy_frequency": trial.suggest_int("policy_frequency", 1, 4),
-        "target_network_frequency": trial.suggest_int("target_network_frequency", 1, 4),
-        "alpha": trial.suggest_float("alpha", 0.01, 1.0, step=0.01),
-        "autotune": trial.suggest_categorical("autotune", [True, False]),
+        "policy_lr": trial.suggest_float("policy_lr", 1e-4, 1e-3, log=True),
+        "q_lr": trial.suggest_float("q_lr", 1e-4, 1e-3, log=True),
+        "gamma": trial.suggest_categorical("gamma", [0.98, 0.99, 0.995]),
+        "tau": trial.suggest_categorical("tau", [0.005, 0.01]),
+        "batch_size": trial.suggest_categorical("batch_size", [128, 256, 512]),
+        "learning_starts": trial.suggest_categorical("learning_starts", [1000, 5000, 10000]),
+        "policy_frequency": trial.suggest_categorical("policy_frequency", [1, 2]),
+        "target_network_frequency": trial.suggest_categorical("target_network_frequency", [1, 2]),
+        "hidden_size": trial.suggest_categorical("hidden_size", [256, 400, 512]),
     }
 
 
@@ -194,7 +213,21 @@ if __name__ == "__main__":
 
     print("\nBest trial:")
     best = study.best_trial
-    print(f"  Success rate: {best.value:.3f}")
+    print(f"  Combined score (0.5*train + 0.5*eval success): {best.value:.3f}")
     print("  Params:")
     for k, v in best.params.items():
         print(f"    {k}: {v}")
+
+    best_cfg = build_cfg(best.params)
+    summary = wandb.init(
+        project=best_cfg.logging.project,
+        entity=best_cfg.logging.get("wandb_entity", None),
+        name="sac_block_hpo_best",
+        group="sac_block_hpo",
+        job_type="summary",
+        reinit=True,
+    )
+    summary.summary["best_combined_score"] = best.value
+    summary.summary["best_trial_number"] = best.number
+    summary.config.update(best.params)
+    summary.finish()
