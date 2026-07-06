@@ -72,7 +72,9 @@ class ContinualBenchVecEnv:
         env = ContinualBenchEnv(seed=self.seed)
         env.set_task(task_name)
         env.reset()
+        # get the target position for the task as opposed to one hot encoded task id
         target_pos = env.init_data[env.task_spec.name].target_pos.astype(np.float32)
+        # if task is door then we need to add the door angle to the goal vector
         door_angle = np.pi / 2 + np.pi / 6 if task_name == "door" else 0.0
         goal = np.concatenate(
             [target_pos, np.array([door_angle], dtype=np.float32)]
@@ -81,6 +83,10 @@ class ContinualBenchVecEnv:
         return goal
 
     def _ensure_goal_vector(self, task_name: str) -> np.ndarray:
+        '''
+        return dictionary of task name to goal vector. This is used to augment the observation space
+        with a task id that is informative for the policy instead of one hot encoded task id.
+        '''
         if task_name not in self.target_pos:
             self.target_pos[task_name] = self._compute_goal_vector(task_name)
         return self.target_pos[task_name]
@@ -99,6 +105,9 @@ class ContinualBenchVecEnv:
         return np.concatenate([terminal_obs, goal]).astype(np.float32)
 
     def _expand_observation_space(self, vec_env):
+        ''' 
+        so the environment obs space is accurate for the policy when it takes in env.observation_space.
+        '''
         if not self.gcrl:
             return vec_env
         obs_space = vec_env.observation_space
@@ -161,7 +170,11 @@ class ContinualBenchVecEnv:
             return RND_SAC(self.cfg, env).reset()
         else:
             raise ValueError(f"Unsupported policy={self.cfg.policy}")
+
     def record_video(self, task_name, agent, logger):
+        '''
+        record a video of the policy performing the task
+        '''
         eval_env = DummyVecEnv([self._make_single_env(0, task_name, render_mode="rgb_array")])
         self._expand_observation_space(eval_env)
         obs = eval_env.reset()
@@ -322,6 +335,14 @@ class ContinualBenchVecEnv:
             vec_env.close()
             logger.on_task_end(task_name)
             seen_tasks.append(task_name)
+            # # we add rnd_sac here
+            # if self.cfg.rnd and self.cfg.policy == "SAC":
+            #     rnd_sac = RND_SAC(self.cfg, vec_env, task_name)
+            #     rnd_sac.train()
+            # elif self.cfg.rnd and self.cfg.policy == "PPO":
+            #     rnd_ppo = RND_PPO(self.cfg, vec_env, task_name)
+            #     rnd_ppo.train()
+
             per_task = self.evaluate_seen_tasks(seen_tasks, agent)
             ap = logger.log_offline_ap(per_task)
             print(f"[Task {task_idx}] {task_name} done. AP(w)={ap:.3f}  per-task={per_task}")
