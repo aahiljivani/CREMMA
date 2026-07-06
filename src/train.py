@@ -19,7 +19,7 @@ import torch
 import torch.optim as optim
 from .cfg import parse_cfg
 from .logger import ContinualLogger
-from src.algorithms import DDPG, RandomPolicy, SAC, RND_SAC
+from src.algorithms import RandomPolicy, SAC, RND_SAC
 from src.buffer import ReplayBuffer, ExpertBuffer
 
 
@@ -162,8 +162,6 @@ class ContinualBenchVecEnv:
     def _build_policy(self, env, num_envs: int): # building SAC and PPO policies soon.
         if self.cfg.policy == "RandomPolicy":
             return RandomPolicy(env.action_space, num_envs)
-        elif self.cfg.policy == "DDPG":
-            return DDPG(self.cfg, env).reset()
         elif self.cfg.policy == "SAC":
             return SAC(self.cfg, env).reset()
         elif self.cfg.policy == "RND_SAC":

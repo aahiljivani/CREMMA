@@ -61,9 +61,10 @@ class RND_SAC(SAC):
         target_policy_state_dict = {k: v for k, v in target_policy_state_dict.items() if k in policy_state_dict}
         policy_state_dict.update(target_policy_state_dict)
         self.policy.load_state_dict(policy_state_dict)
-        # HERE
+        
         self.load_target_policy_and_buffer(0, self._replay_buffer_size)
         last_return = self._evaluate_policy(trainer.step_itr)
+        # HERE
         self.on_task_start(0)
 
         task_list = list(range(1,tasknum))

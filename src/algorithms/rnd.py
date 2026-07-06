@@ -1,6 +1,8 @@
 from .sac import SAC
 from src.buffer import ExpertBuffer
 import torch
+from torch.distributions import Normal, Independent, kl_divergence
+
 class RND_SAC(SAC):
     def __init__(self, cfg, env, task_name, agent, buffer):
         super().__init__(cfg, env)
@@ -42,7 +44,13 @@ class RND_SAC(SAC):
         log_stds = torch.cat(log_stds, dim=0)
         return means, log_stds
 
-    # def compute_kl_loss
+    @staticmethod
+    def gaussian_kl(dist1, dist2):
+        mu1, log_std1 = dist1
+        mu2, log_std2 = dist2
+        p = Independent(Normal(mu1, log_std1.exp()), 1)
+        q = Independent(Normal(mu2, log_std2.exp()), 1)
+        return kl_divergence(p, q).mean()
     
     def train(self):
         for epoch in range(self.nepochs_offline):

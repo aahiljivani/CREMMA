@@ -17,14 +17,16 @@ class ExpertBuffer:
 
     def add_observation_batch(self, observations, task_name):
         """
-        Add a episodic batch to the buffer.
+        Add task observations from replay buffer to the expert buffer. 
+        include all task observations from rb where random experience
+        tuples are chosen and their target means and log stds are computed. 
 
         Args:
-            episodes (EpisodeBatch): Episodes to add.
-            observations are a numpy array
-
+            observations (numpy array): Observations to add.
+            task_name (str): Task name to add.
+            agent (Agent): Agent to use for target mean and log std computation.
+            
         """
-        
         assert len(observations) == self.task_buffer_size
 
         
@@ -109,13 +111,3 @@ class ReplayBuffer:
             dones=torch.tensor(self.dones[indices]).to(self.device),
             next_observations=torch.tensor(self.next_observations[indices]).to(self.device),
         )
-
-         
-
-
-
-
-        
-
-
-
