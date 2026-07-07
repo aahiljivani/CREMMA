@@ -28,6 +28,8 @@ class RND_SAC(SAC):
         
 
     def compute_target(self):
+        # we have to find a way to preserve the offline policy since
+        #  we do not load the target policy as it is the current policy
         means = []
         log_stds = []
         for i in range(0,len(self.observations),self.batch_size):
