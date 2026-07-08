@@ -3,7 +3,7 @@ import torch
 from types import SimpleNamespace
 
 class ExpertBuffer:
-    def __init__(self, cfg, env, agent, task_name):
+    def __init__(self, cfg, env, task_name):
         self.expert_buffer_size = cfg.expert_buffer_size
         self.task_list = cfg.task_list
         self.env = env
@@ -11,13 +11,13 @@ class ExpertBuffer:
         self.observation_buffer = []
         self.target_mean_buffer = []
         self.target_log_std_buffer = []
-        self.tasks = []
+        self.tasks = {}
         self.task_buffer_size = self.expert_buffer_size// len(self.task_list)
-        self.agent = agent
+        
 
-    def add_observation_batch(self, observations, task_name):
+    def add_observation_batch(self, observations, task_name, agent):
         """
-        Add task observations from replay buffer to the expert buffer. 
+        Add task observations from replay buffer to the expert buffer. of size task_buffer_size
         include all task observations from rb where random experience
         tuples are chosen and their target means and log stds are computed. 
 
@@ -27,9 +27,10 @@ class ExpertBuffer:
             agent (Agent): Agent to use for target mean and log std computation.
             
         """
-        assert len(observations) == self.task_buffer_size
-
-        
+        # sample a batch of observations from the observation buffer
+        obs_len = len(observations)
+        idx = np.random.choice(list(range(obs_len)), size=self.task_buffer_size)
+        observations = observations[idx]
         BATCH_SIZE = 64
         
         means = []
@@ -42,31 +43,23 @@ class ExpertBuffer:
             else:
                 end = i+BATCH_SIZE
             with torch.no_grad():
-                mean, log_std = self.agent.actor.forward(torch.tensor(observations[start:end]).to(self.device))
-                means.append(mean)
-                log_stds.append(log_std)
-        
-        mean_targets = torch.cat(means)
-        log_std_targets = torch.cat(log_stds)
+                mean, log_std = agent(torch.tensor(observations[start:end]).to(self.device))
+                # make all means and log_stds torchtensors
+                means.append(mean.cpu().numpy())
+                log_stds.append(log_std.cpu().numpy())
 
-        if len(self.tasks)>=1:
-            observations = torch.tensor(observations).to(self.device)
-            self.observation_buffer = torch.cat([self.observation_buffer, observations])
-            self.target_mean_buffer = torch.cat([self.target_mean_buffer, mean_targets])
-            self.target_log_std_buffer = torch.cat([self.target_log_std_buffer, log_std_targets])
-        else:
-            self.observation_buffer = torch.tensor(observations).to(self.device)
-            self.target_mean_buffer = mean_targets
-            self.target_log_std_buffer = log_std_targets
-        
-        self.tasks.append(task_name)
+        means = torch.tensor(means).to(self.device)
+        log_stds = torch.tensor(log_stds).to(self.device)
+        observation = torch.tensor(observations).to(self.device)
+        self.tasks[task_name] = [observation, means, log_stds]
 
-    def sample_expert_batch(self, batch_size):
-        buffer_size = len(self.tasks) * self.task_buffer_size
+
+    def sample_expert_batch(self, batch_size, task_name):
+        buffer_size = len(self.tasks[task_name][0])
         idx = np.random.randint(buffer_size, size=batch_size)
-        obs = self.observation_buffer[idx]
-        target_means = self.target_mean_buffer[idx]
-        target_log_stds = self.target_log_std_buffer[idx]
+        obs = self.tasks[task_name][0][idx]
+        target_means = self.tasks[task_name][1][idx]
+        target_log_stds = self.tasks[task_name][2][idx]
         
         return obs, target_means, target_log_stds
     
