@@ -1,9 +1,11 @@
 from .sac import SAC
 from src.buffer import ExpertBuffer
 import torch
+from copy import deepcopy
 from torch.distributions import Normal, Independent, kl_divergence
 import numpy as np
 from tqdm import tqdm
+from time import time
 class RND_SAC(SAC):
     def __init__(self, cfg, env, task_name, buffer, agent=None, file_path=None):
         super().__init__(cfg, env)
@@ -19,22 +21,36 @@ class RND_SAC(SAC):
         self.replay_buffer = buffer
         self.file_path = file_path
         self.task_name = task_name
+        self.cfg = cfg
+        
+
+
         # self.reset_offline_policy = cfg.reset_offline_actor
         self.expert_buffer = ExpertBuffer(cfg, env,self.task_name)
         self.rnd_batch_size = cfg.rnd_batch_size
         self.observations = self.replay_buffer.observations
         self.device = cfg.device
-        self.results = {}
-        self.results['Policy loss'] = []
-        self.results['BC loss'] = []
-        self.results['Speed (it/s)'] = []
+        self.results = {'Policy loss': [],
+                        'BC loss': [],
+                        'Speed (it/s)': []}
+        
         self.seen_tasks = []
         
     def compute_distill_setup(self):
-        if self.offline_policy is None and self.file_path is None:
-            self.offline_policy = self.target_policy
-        elif self.file_path is not None:
+        if self.file_path is not None:
             self.load_target_policy(self.file_path)
+
+        self.target_policy = deepcopy(self.target_policy).to(self.device).eval()
+        for param in self.target_policy.parameters():
+            param.requires_grad_(False)
+
+        if self.offline_policy is None:
+            self.offline_policy = deepcopy(self.target_policy).to(self.device)
+            self.offline_policy.train()
+            self.offline_actor_optimizer = torch.optim.Adam(
+                self.offline_policy.parameters(),
+                lr=self.cfg.policy_lr,
+            )
 
         # add the observations to the expert buffer
         self.expert_buffer.add_observation_batch(self.observations, self.task_name, self.target_policy)
@@ -42,57 +58,41 @@ class RND_SAC(SAC):
 
     def load_target_policy(self, file_path):
         
-        self.target_policy = SAC(self.cfg, self.env).reset()
+        target_agent = SAC(self.cfg, self.env).reset()
         checkpoint = torch.load(file_path, map_location=self.device)
-        self.target_policy.load_state_dict(checkpoint)
+        if "actor" in checkpoint:
+            target_agent.actor.load_state_dict(checkpoint["actor"])
+        else:
+            target_agent.actor.load_state_dict(checkpoint)
+        self.target_policy = target_agent.actor
         print(f"Target policy loaded from {file_path}")
     
 
     def compute_target(self):
         # we have to find a way to preserve the offline policy since
         #  we do not load the target policy as it is the current policy
+        observations = torch.as_tensor(self.observations, dtype=torch.float32, device=self.device)
         means = []
         log_stds = []
-        for i in range(0,len(self.observations),self.batch_size):
-            start = i
-            if i+self.rnd_batch_size > len(self.observations):
-                end = len(self.observations)
-            else:
-                end = i+self.rnd_batch_size
+        for start in range(0, len(observations), self.rnd_batch_size):
+            end = min(start + self.rnd_batch_size, len(observations))
             with torch.no_grad():
-                mean, log_std = self.target_agent(self.observations[start:end])
-                means.append(mean)
-                log_stds.append(log_std)
-        means = torch.cat(means, dim=0)
-        log_stds = torch.cat(log_stds, dim=0)
-        return means, log_stds
+                mean, log_std = self.target_policy(observations[start:end])
+                means.append(mean.detach())
+                log_stds.append(log_std.detach())
+        return torch.cat(means, dim=0), torch.cat(log_stds, dim=0)
 
-    def bc_loss(self, means, log_stds, target_means, target_log_stds):
-       # loop through all tasks
-       loss = 0
-        for task_name in self.seen_tasks
-                obs, target_means, target_log_stds = self._expert_buffer.sample_expert_batch(self.batch_size, task_name=task_name)
-                means, log_stds = self.policy(obs)
-                 
-
-                if self._bc_kl == 'reverse':
-                    loss += self.kl_loss((means, log_stds), (target_means, target_log_stds)) * self._cl_reg_coef
-                elif self._bc_kl == 'forward':
-                    loss += self.kl_loss((target_means, target_log_stds),(means, log_stds)) * self._cl_reg_coef
-
-                
+    def bc_loss(self):
+        if len(self.seen_tasks) == 1:
+            return torch.zeros(1).to(self.device)
         else:
-            obs, target_means, target_log_stds, task_idxs = self._expert_buffer.sample_expert_batch(self.BATCH_SIZE)
+            bc_loss = torch.zeros(1, device=self.device)
+            for task_idx in range(len(self.seen_tasks)-1):
+                obs, target_means, target_log_stds = self.expert_buffer.sample_expert_batch(self.batch_size, task_name= self.seen_tasks[task_idx])
+                means, log_stds = self.offline_policy(obs)
+                bc_loss += self.gaussian_kl((means, log_stds), (target_means, target_log_stds)) * self.cl_reg_coef
 
-            action_info = self.policy(obs, task_idxs)[1]
-            means, log_stds = action_info['mean'], action_info['log_std']
-
-            if self._bc_kl == 'reverse':
-                loss = self.kl_loss((means, log_stds), (target_means, target_log_stds)) * self._cl_reg_coef
-            elif self._bc_kl == 'forward':
-                loss = self.kl_loss((target_means, target_log_stds),(means, log_stds)) * self._cl_reg_coef
-
-        return loss 
+            return bc_loss
 
     @staticmethod
     def gaussian_kl(dist1, dist2):
@@ -103,14 +103,16 @@ class RND_SAC(SAC):
         return kl_divergence(p, q).mean()
     
     def train(self):
-        self.compute_distill_setup(self)
-        target_means, target_log_stds = self.compute_target(self)
+        self.compute_distill_setup()
+        all_target_means, all_target_log_stds = self.compute_target()
+        observations = torch.as_tensor(self.observations, dtype=torch.float32, device=self.device)
+        global_step = 0
         for epoch in range(self.nepochs_offline):
             
-            idx_list = list(range(len(self.observations)))
+            idx_list = list(range(len(observations)))
             np.random.shuffle(idx_list)
             pbar = tqdm(
-                range(0,len(self.observations), self.batch_size), 
+                range(0,len(observations), self.batch_size), 
                 desc = 'Epoch '+str(epoch+1), 
                 ascii = ' =',
                 leave=True)
@@ -118,41 +120,43 @@ class RND_SAC(SAC):
             for i in pbar:
                 start = i
                 end = start + self.batch_size
-                if end > len(self.observations):
-                    end = len(self.observations)
+                if end > len(observations):
+                    end = len(observations)
                 idxs = idx_list[start:end]
-                obs, target_means, target_log_stds = self.observations[idxs], target_means[idxs], target_log_stds[idxs]
+                obs = observations[idxs]
+                batch_target_means = all_target_means[idxs]
+                batch_target_log_stds = all_target_log_stds[idxs]
 
                 means, log_stds = self.offline_policy(obs)
                 # first loss is the distillation loss
-                distill_loss = self.gaussian_kl((target_means, target_log_stds), (means, log_stds))
-                self.expert_buffer.sample_expert_batch(self.batch_size)
-                bc_loss = self.gaussian_kl((means, log_stds), (target_means, target_log_stds)) * self.cl_reg_coef
+                distill_loss = self.gaussian_kl((batch_target_means, batch_target_log_stds), (means, log_stds))
+                bc_loss = self.bc_loss()
                 loss = distill_loss + bc_loss
 
-                zero_optim_grads(self._policy_optimizer)
+                self.offline_actor_optimizer.zero_grad()
                 loss.backward()
-                self._policy_optimizer.step()
+                self.offline_actor_optimizer.step()
 
                 end_time = time()
 
                 global_step += 1
 
                 if global_step % 1000 == 0:
-                    if self._use_wandb:
+                    logging_cfg = getattr(self.cfg, "logging", None)
+                    if logging_cfg is not None and bool(getattr(logging_cfg, "enable_wandb", False)):
+                        import wandb
+
                         wandb.log({
-                            'Policy loss': policy_loss.item(),
-                            'BC loss': bc_loss.item(),
-                            'Speed (it/s)' : (self.global_step / (end_time - self.start_time))
+                            "global_step": global_step,
+                            "task_name": self.task_name,
+                            "RND/Policy loss": distill_loss.item(),
+                            "RND/BC loss": bc_loss.item(),
+                            "RND/Speed (it/s)": global_step / (end_time - self.start_time),
                         })
 
-                    self.results['Policy loss'].append(policy_loss.item())
+                    self.results['Policy loss'].append(distill_loss.item())
                     self.results['BC loss'].append(bc_loss.item())
-                    self.results['Speed (it/s)'].append((self.global_step / (end_time - self.start_time)))
+                    self.results['Speed (it/s)'].append((global_step / (end_time - self.start_time)))
 
-            
-        last_return = self._evaluate_policy(trainer.step_itr)
-        self.save_results()
-        
-        self.on_task_start(seq_idx)
+        return self.offline_policy
             
