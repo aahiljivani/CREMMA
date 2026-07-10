@@ -79,10 +79,9 @@ def train_for_hpo(cfg, trial_number: int, params: dict) -> float:
     )
 
     bench = ContinualBenchVecEnv(cfg)
-    vec_envs = None
+    vec_env = None
     try:
-        vec_envs = bench.make_envs()           # {TASK: VecEnv}
-        vec_env = vec_envs[TASK]
+        vec_env = bench.make_task_env(TASK)
 
         agent = bench._build_policy(vec_env, num_envs=bench.num_envs)
         rb = ReplayBuffer(cfg=cfg, env=vec_env)
@@ -173,12 +172,11 @@ def train_for_hpo(cfg, trial_number: int, params: dict) -> float:
         run.summary["combined_score"] = combined_score
         return combined_score
     finally:
-        if vec_envs is not None:
-            for vec_env in vec_envs.values():
-                try:
-                    vec_env.close()
-                except Exception:
-                    pass
+        if vec_env is not None:
+            try:
+                vec_env.close()
+            except Exception:
+                pass
         run.finish()
 
 

@@ -23,7 +23,7 @@ logging:
   wandb_entity: jivani-aahil-university-of-ottawa
 
 train:
-  episodes_per_task: 100
+  episodes_per_task: 200
 
 eval:
   eval_video_steps: 10000

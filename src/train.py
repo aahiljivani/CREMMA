@@ -7,7 +7,7 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 
 import random
 from pathlib import Path
-from typing import Dict, List
+from typing import List
 
 import numpy as np
 from gym.spaces import Box
@@ -16,7 +16,6 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from continual_bench.envs import ContinualBenchEnv
 from shimmy.openai_gym_compatibility import GymV21CompatibilityV0
 import torch
-import torch.optim as optim
 from .cfg import parse_cfg
 from .logger import ContinualLogger
 from src.algorithms import RandomPolicy, SAC, RND_SAC
@@ -145,27 +144,20 @@ class ContinualBenchVecEnv:
             "Expected one of {'continual', 'random', 'task'}"
         )
 
-    def make_envs(self) -> Dict[str, SubprocVecEnv]: 
-        ''' 
-        creates vectorized environment for parallel envs training across single task.
-        returns a dict mapping task_name to corresponding vectorized env.
-         '''
-        vec_envs = {}
-        for task_name in self._build_training_order():
-            if self.gcrl:
-                self._ensure_goal_vector(task_name)
-            env_fns = [self._make_single_env(i, task_name) for i in range(self.num_envs)]
-            vec_envs[task_name] = self.vec_env_cls(env_fns, start_method="spawn")
-            self._expand_observation_space(vec_envs[task_name])
-        return vec_envs
+    def make_task_env(self, task_name: str):
+        """Create a vectorized env for a single task (closed after that task finishes)."""
+        if self.gcrl:
+            self._ensure_goal_vector(task_name)
+        env_fns = [self._make_single_env(i, task_name) for i in range(self.num_envs)]
+        vec_env = self.vec_env_cls(env_fns, start_method="spawn")
+        return self._expand_observation_space(vec_env)
 
     def _build_policy(self, env, num_envs: int): # building SAC and PPO policies soon.
         if self.cfg.policy == "RandomPolicy":
             return RandomPolicy(env.action_space, num_envs)
         elif self.cfg.policy == "SAC":
             return SAC(self.cfg, env).reset()
-        elif self.cfg.policy == "RND_SAC":
-            return RND_SAC(self.cfg, env).reset()
+        
         else:
             raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
@@ -180,7 +172,7 @@ class ContinualBenchVecEnv:
         done = [False]
         frames = []
         while not done[0]:
-            actions = agent.predict(obs)
+            actions = agent.predict(obs, deterministic=True)
             obs, _, done, _ = eval_env.step(actions)
             obs = self._augment_obs(task_name, obs)
             frames.append(eval_env.envs[0].gym_env.render())
@@ -199,7 +191,7 @@ class ContinualBenchVecEnv:
             done = [False]
             ep_success = False
             while not done[0]:
-                actions = agent.predict(obs)
+                actions = agent.predict(obs, deterministic=True)
                 obs, _, done, infos = eval_env.step(actions)
                 obs = self._augment_obs(task_name, obs)
                 if bool(infos[0].get("success", 0.0)):
@@ -221,11 +213,9 @@ class ContinualBenchVecEnv:
         # device
         self.cfg.device = "cuda" if torch.cuda.is_available() and self.cfg.cuda else "cpu"
         print(f"Using device: {self.cfg.device}")
-        # create the vectorized environments
-        vec_envs = self.make_envs()
-        training_order = list(vec_envs.keys())
-        # to build the policy we need action space and observation space of the first task which is consistent across all tasks.
-        first_env = vec_envs[training_order[0]]
+        # Only one task's envs are live at a time (avoids 6x EGL VRAM from pre-spawning all tasks).
+        training_order = self._build_training_order()
+        first_env = self.make_task_env(training_order[0])
         # building the policy will come from intitializing the agent first. i.e. calling SAC.reset()
         agent = self._build_policy(first_env, num_envs=self.num_envs)
         # maybe we need a buffer type?
@@ -233,6 +223,12 @@ class ContinualBenchVecEnv:
         learning_starts = int(self.cfg.get("learning_starts", 0))
         if self.replay_buffer_enabled:
             rb = ReplayBuffer(cfg=self.cfg, env=first_env)
+
+        rnd_enabled = bool(self.cfg.get("rnd", False)) and self.cfg.policy == "SAC"
+        if rnd_enabled and not self.replay_buffer_enabled:
+            raise ValueError("rnd=true requires replay_buffer_enabled=true")
+        expert_buffer = ExpertBuffer(cfg=self.cfg, env=first_env) if rnd_enabled else None
+        rnd_sac = None
 
         # logging CRL specific metrics here.
         run_name = f"{self.cfg.policy}_{self.cfg.benchmark_mode}_{self.num_envs}env_seed{self.seed}"
@@ -248,98 +244,135 @@ class ContinualBenchVecEnv:
         )
         seen_tasks = []
         for task_idx, task_name in enumerate(training_order):
-            vec_env = vec_envs[task_name]
-            max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
-            if self.replay_buffer_enabled:
-                rb.reset()
-            # load weights from previous task before starting training on this one
-            if task_idx > 0 and hasattr(agent, "load"):
-                agent.load(str(save_dir))
-                print(f"[Task {task_idx}] Loaded checkpoint from task {training_order[task_idx - 1]}")
+            # Reuse the bootstrap env for task 0; create fresh envs for later tasks.
+            vec_env = first_env if task_idx == 0 else self.make_task_env(task_name)
+            try:
+                max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
+                if self.replay_buffer_enabled:
+                    rb.reset()
+                # Without R&D, continue from the previous task checkpoint.
+                # With R&D, the online agent is reset after each task's eval instead.
+                if task_idx > 0 and not rnd_enabled and hasattr(agent, "load"):
+                    agent.load(str(save_dir))
+                    print(f"[Task {task_idx}] Loaded checkpoint from task {training_order[task_idx - 1]}")
 
-            for ep in range(int(self.train_episodes_per_task)):
-                obs = vec_env.reset() # reset the vec env
-                obs = self._augment_obs(task_name, obs)
-                episode_returns = np.zeros(vec_env.num_envs, dtype=np.float32)
-                episode_lengths = np.zeros(vec_env.num_envs, dtype=np.int32)
+                for ep in range(int(self.train_episodes_per_task)):
+                    obs = vec_env.reset() # reset the vec env
+                    obs = self._augment_obs(task_name, obs)
+                    episode_returns = np.zeros(vec_env.num_envs, dtype=np.float32)
+                    episode_lengths = np.zeros(vec_env.num_envs, dtype=np.int32)
 
-                for t in range(max_episode_steps):
-                    if logger.global_step < learning_starts:
-                        action_space = vec_env.action_space
-                        actions = np.array([action_space.sample() for _ in range(vec_env.num_envs)])
-                    else:
-                    # we can specify updates here and task specific buffer stuff. like if policy is sac warmup buffer and append to buffer
-                    # HERE
-                        actions = agent.predict(obs)
-                    next_obs, rewards, dones, infos = vec_env.step(actions)
-                    next_obs = self._augment_obs(task_name, next_obs)
-                    episode_returns += rewards
-                    episode_lengths += 1
-                    successes = np.array(
-                        [float(info["success"]) for info in infos],
-                        dtype=np.float32,
-                    )
-                    # if both done and success then the episode is terminated or if just done is true as well
-                    terminated = np.logical_and(dones, successes.astype(bool))
-                    
-                    real_next_obs = next_obs.copy()
-                    for idx, done in enumerate(dones):
-                        if done:
-                            real_next_obs[idx] = self._augment_terminal_obs(
-                                task_name, infos[idx]["terminal_observation"]
-                            )
-                    if self.replay_buffer_enabled:
-                        rb.add(obs, actions, rewards, terminated, real_next_obs)
-
-                    obs = next_obs
-                    # more logging of CRL metrics
-                    logger.update_online(
-                        task_name=task_name,
-                        task_idx=task_idx,
-                        episode_idx=ep,
-                        timestep_in_episode=t,
-                        successes=successes,
-                    )
-
-                    for idx, done in enumerate(dones):
-                        if not done:
-                            continue
-                        logger.log_metrics(
-                            {
-                                "charts/episodic_return": float(episode_returns[idx]),
-                                "charts/episodic_length": int(episode_lengths[idx]),
-                            }
+                    for t in range(max_episode_steps):
+                        if logger.global_step < learning_starts:
+                            action_space = vec_env.action_space
+                            actions = np.array([action_space.sample() for _ in range(vec_env.num_envs)])
+                        else:
+                        # we can specify updates here and task specific buffer stuff. like if policy is sac warmup buffer and append to buffer
+                        # HERE
+                            actions = agent.predict(obs, deterministic=False)
+                        next_obs, rewards, dones, infos = vec_env.step(actions)
+                        next_obs = self._augment_obs(task_name, next_obs)
+                        episode_returns += rewards
+                        episode_lengths += 1
+                        successes = np.array(
+                            [float(info["success"]) for info in infos],
+                            dtype=np.float32,
                         )
-                        logger.on_episode_end(
+                        # if both done and success then the episode is terminated or if just done is true as well
+                        terminated = np.logical_and(dones, successes.astype(bool))
+                        
+                        real_next_obs = next_obs.copy()
+                        for idx, done in enumerate(dones):
+                            if done:
+                                real_next_obs[idx] = self._augment_terminal_obs(
+                                    task_name, infos[idx]["terminal_observation"]
+                                )
+                        if self.replay_buffer_enabled:
+                            rb.add(obs, actions, rewards, terminated, real_next_obs)
+
+                        obs = next_obs
+                        # more logging of CRL metrics
+                        logger.update_online(
                             task_name=task_name,
-                            success=bool(infos[idx].get("success", False)),
-                            episode_length=int(episode_lengths[idx]),
+                            task_idx=task_idx,
+                            episode_idx=ep,
+                            timestep_in_episode=t,
+                            successes=successes,
                         )
-                        episode_returns[idx] = 0.0
-                        episode_lengths[idx] = 0
 
-                    if (
-                        self.replay_buffer_enabled
-                        and logger.global_step > learning_starts
-                        and hasattr(agent, "update")
-                    ):
-                        for _ in range(self.num_envs):
-                            data = rb.sample(self.cfg.batch_size)
-                            algorithm_metrics = agent.update(data)
-                        logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
+                        for idx, done in enumerate(dones):
+                            if not done:
+                                continue
+                            logger.log_metrics(
+                                {
+                                    "charts/episodic_return": float(episode_returns[idx]),
+                                    "charts/episodic_length": int(episode_lengths[idx]),
+                                }
+                            )
+                            logger.on_episode_end(
+                                task_name=task_name,
+                                success=bool(infos[idx].get("success", False)),
+                                episode_length=int(episode_lengths[idx]),
+                            )
+                            episode_returns[idx] = 0.0
+                            episode_lengths[idx] = 0
 
-                    if logger.run is not None and logger.global_step % int(self.cfg.eval.eval_video_steps) == 0:
-                        self.record_video(task_name, agent, logger)
-            vec_env.close()
+                        if (
+                            self.replay_buffer_enabled
+                            and logger.global_step > learning_starts
+                            and hasattr(agent, "update")
+                        ):
+                            for _ in range(self.num_envs):
+                                data = rb.sample(self.cfg.batch_size)
+                                algorithm_metrics = agent.update(data)
+                            logger.log_algorithm_metrics(algorithm_metrics, step=logger.global_step)
+
+                        if logger.run is not None and logger.global_step % int(self.cfg.eval.eval_video_steps) == 0:
+                            self.record_video(task_name, agent, logger)
+
+                # Offline R&D distillation: collect expert rollouts, then distill.
+                if rnd_enabled:
+                    target_capacity = int(self.cfg.target_replay_buffer_size)
+                    rb_target = ReplayBuffer(cfg=self.cfg, env=vec_env, capacity=target_capacity)
+                    obs = vec_env.reset()
+                    obs = self._augment_obs(task_name, obs)
+                    while rb_target.size < rb_target.replay_buffer_size:
+                        actions = agent.predict(obs, deterministic=True)
+                        next_obs, rewards, dones, infos = vec_env.step(actions)
+                        next_obs = self._augment_obs(task_name, next_obs)
+
+                        real_next_obs = next_obs.copy()
+                        for idx, done in enumerate(dones):
+                            if done:
+                                real_next_obs[idx] = self._augment_terminal_obs(
+                                    task_name, infos[idx]["terminal_observation"]
+                                )
+                        rb_target.add(obs, actions, rewards, dones, real_next_obs)
+                        obs = next_obs
+
+                    print(
+                        f"[Task {task_idx}] Collected {rb_target.size} expert transitions for RND"
+                    )
+
+                    if rnd_sac is None:
+                        rnd_sac = RND_SAC(
+                            self.cfg,
+                            vec_env,
+                            rb_target,
+                            agent=agent,
+                            expert_buffer=expert_buffer,
+                        )
+                    else:
+                        rnd_sac.replay_buffer = rb_target
+                        rnd_sac.env = vec_env
+                    offline_policy = rnd_sac.train(task_name, agent=agent)
+                    agent.actor.load_state_dict(offline_policy.state_dict())
+                    print(f"[Task {task_idx}] RND distillation finished for {task_name}")
+            finally:
+                vec_env.close()
+
             logger.on_task_end(task_name)
             seen_tasks.append(task_name)
-            # # we add rnd_sac here
-            # if self.cfg.rnd and self.cfg.policy == "SAC":
-            #     rnd_sac = RND_SAC(self.cfg, vec_env, task_name)
-            #     rnd_sac.train()
-            # elif self.cfg.rnd and self.cfg.policy == "PPO":
-            #     rnd_ppo = RND_PPO(self.cfg, vec_env, task_name)
-            #     rnd_ppo.train()
 
             per_task = self.evaluate_seen_tasks(seen_tasks, agent)
             ap = logger.log_offline_ap(per_task)
@@ -347,6 +380,12 @@ class ContinualBenchVecEnv:
             if hasattr(agent, "save"):
                 agent.save(str(save_dir))
                 print(f"[Task {task_idx}] Saved checkpoint after task {task_name}")
+
+            # R&D: reset the online agent after eval so the next task trains from scratch.
+            # The offline policy in rnd_sac is preserved across tasks.
+            if rnd_enabled and task_idx < len(training_order) - 1 and hasattr(agent, "reset"):
+                agent.reset()
+                print(f"[Task {task_idx}] Reset online agent for next task")
                 
         logger.finish()
 

@@ -7,8 +7,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 LOG_STD_MAX = 2
-# R&D Parameters instead of -5
-LOG_STD_MIN = -20
+LOG_STD_MIN = -5
+
+
+def weight_init(m):
+    if isinstance(m, nn.Linear):
+        nn.init.orthogonal_(m.weight.data)
+        m.bias.data.fill_(0.0)
 
 
 class SoftQNetwork(nn.Module):
@@ -17,19 +22,23 @@ class SoftQNetwork(nn.Module):
         self.hidden_size = hidden_size
         observation_space = env.observation_space
         action_space = env.action_space
-        self.fc1 = nn.Linear(
-            np.array(observation_space.shape).prod() + np.prod(action_space.shape),
-            hidden_size,
-        )
+        obs_dim = int(np.array(observation_space.shape).prod())
+        act_dim = int(np.prod(action_space.shape))
+        self.fc1 = nn.Linear(obs_dim + act_dim, hidden_size)
+        self.ln1 = nn.LayerNorm(hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, 1)
+        self.ln2 = nn.LayerNorm(hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.ln3 = nn.LayerNorm(hidden_size)
+        self.fc4 = nn.Linear(hidden_size, 1)
+        self.apply(weight_init)
 
     def forward(self, x, a):
         x = torch.cat([x, a], 1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+        x = F.relu(self.ln1(self.fc1(x)))
+        x = F.relu(self.ln2(self.fc2(x)))
+        x = F.relu(self.ln3(self.fc3(x)))
+        return self.fc4(x)
 
 
 class Actor(nn.Module):
@@ -38,10 +47,13 @@ class Actor(nn.Module):
         self.hidden_size = hidden_size
         observation_space = env.observation_space
         action_space = env.action_space
-        self.fc1 = nn.Linear(np.array(observation_space.shape).prod(), hidden_size)
+        obs_dim = int(np.array(observation_space.shape).prod())
+        act_dim = int(np.prod(action_space.shape))
+        self.fc1 = nn.Linear(obs_dim, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc_mean = nn.Linear(hidden_size, np.prod(action_space.shape))
-        self.fc_logstd = nn.Linear(hidden_size, np.prod(action_space.shape))
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.fc_mean = nn.Linear(hidden_size, act_dim)
+        self.fc_logstd = nn.Linear(hidden_size, act_dim)
         self.register_buffer(
             "action_scale",
             torch.tensor((action_space.high - action_space.low) / 2.0, dtype=torch.float32),
@@ -50,15 +62,21 @@ class Actor(nn.Module):
             "action_bias",
             torch.tensor((action_space.high + action_space.low) / 2.0, dtype=torch.float32),
         )
+        self.apply(weight_init)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
         mean = self.fc_mean(x)
         log_std = self.fc_logstd(x)
         log_std = torch.tanh(log_std)
         log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
         return mean, log_std
+
+    def get_eval_action(self, x):
+        mean, _ = self(x)
+        return torch.tanh(mean) * self.action_scale + self.action_bias
 
     def get_action(self, x):
         mean, log_std = self(x)
@@ -105,19 +123,21 @@ class SAC:
         self.q_optimizer = optim.Adam(list(self.q1.parameters()) + list(self.q2.parameters()), lr=self.q_lr)
         self.actor_optimizer = optim.Adam(list(self.actor.parameters()), lr=self.learning_rate)
         if self.autotune:
-            
             self.target_entropy = -torch.prod(torch.Tensor(self.env.action_space.shape).to(self.device)).item()
             self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
             self.alpha = self.log_alpha.exp().item()
             self.a_optimizer = optim.Adam([self.log_alpha], lr=self.q_lr)
         return self
 
-    def predict(self, obs):
+    def predict(self, obs, deterministic=False):
         with torch.no_grad():
-            action, _, _ = self.actor.get_action(torch.Tensor(obs).to(self.device))
+            if deterministic:
+                action = self.actor.get_eval_action(torch.as_tensor(obs, dtype=torch.float32, device=self.device))
+            else:
+                action, _, _ = self.actor.get_action(torch.as_tensor(obs, dtype=torch.float32, device=self.device))
             return action.cpu().numpy()
-    
-    def update(self, data): # where data is a ReplayBuffer with torch.tensor type
+
+    def update(self, data):  # where data is a ReplayBuffer with torch.tensor type
         self.update_count += 1
         actor_loss = None
         alpha_loss = None
@@ -216,5 +236,5 @@ class SAC:
         if self.autotune and checkpoint["log_alpha"] is not None:
             with torch.no_grad():
                 self.log_alpha.copy_(checkpoint["log_alpha"])
-        
+
         print(f"model loaded from {model_path}")

@@ -3,56 +3,50 @@ import torch
 from types import SimpleNamespace
 
 class ExpertBuffer:
-    def __init__(self, cfg, env, task_name):
-        self.expert_buffer_size = cfg.expert_buffer_size
+    def __init__(self, cfg, env):
+        # Paper: |M_k| = expert_buffer_size per task (default 10k).
+        self.task_buffer_size = int(cfg.expert_buffer_size)
         self.task_list = cfg.task_list
         self.env = env
         self.device = cfg.device
-        self.observation_buffer = []
-        self.target_mean_buffer = []
-        self.target_log_std_buffer = []
         self.tasks = {}
-        self.task_buffer_size = self.expert_buffer_size// len(self.task_list)
-        
 
     def add_observation_batch(self, observations, task_name, agent):
         """
-        Add task observations from replay buffer to the expert buffer. of size task_buffer_size
-        include all task observations from rb where random experience
-        tuples are chosen and their target means and log stds are computed. 
+        Add task observations from replay buffer to the expert buffer of size
+        task_buffer_size. Random experience tuples are chosen and their target
+        means and log stds are computed.
 
         Args:
             observations (numpy array): Observations to add.
             task_name (str): Task name to add.
-            agent (Agent): Agent to use for target mean and log std computation.
-            
+            agent: Actor module that returns (mean, log_std).
         """
-        # sample a batch of observations from the observation buffer
         obs_len = len(observations)
-        idx = np.random.choice(list(range(obs_len)), size=self.task_buffer_size)
+        if obs_len == 0:
+            raise ValueError("Cannot add expert observations from an empty buffer")
+
+        sample_size = min(self.task_buffer_size, obs_len)
+        idx = np.random.choice(obs_len, size=sample_size, replace=False)
         observations = observations[idx]
-        BATCH_SIZE = 64
-        
+        batch_size = 64
+
         means = []
         log_stds = []
-
-        for i in range(0,len(observations),BATCH_SIZE):
-            start = i
-            if i+BATCH_SIZE > len(observations):
-                end = len(observations)
-            else:
-                end = i+BATCH_SIZE
+        for start in range(0, len(observations), batch_size):
+            end = min(start + batch_size, len(observations))
             with torch.no_grad():
-                mean, log_std = agent(torch.tensor(observations[start:end]).to(self.device))
-                # make all means and log_stds torchtensors
-                means.append(mean.cpu().numpy())
-                log_stds.append(log_std.cpu().numpy())
+                obs_batch = torch.as_tensor(
+                    observations[start:end], dtype=torch.float32, device=self.device
+                )
+                mean, log_std = agent(obs_batch)
+                means.append(mean.detach())
+                log_stds.append(log_std.detach())
 
-        means = torch.tensor(means).to(self.device)
-        log_stds = torch.tensor(log_stds).to(self.device)
-        observation = torch.tensor(observations).to(self.device)
-        self.tasks[task_name] = [observation, means, log_stds]
-
+        mean_targets = torch.cat(means, dim=0)
+        log_std_targets = torch.cat(log_stds, dim=0)
+        observation = torch.as_tensor(observations, dtype=torch.float32, device=self.device)
+        self.tasks[task_name] = [observation, mean_targets, log_std_targets]
 
     def sample_expert_batch(self, batch_size, task_name):
         buffer_size = len(self.tasks[task_name][0])
@@ -60,14 +54,12 @@ class ExpertBuffer:
         obs = self.tasks[task_name][0][idx]
         target_means = self.tasks[task_name][1][idx]
         target_log_stds = self.tasks[task_name][2][idx]
-        
         return obs, target_means, target_log_stds
-    
 
 
 class ReplayBuffer:
-    def __init__(self, cfg, env):
-        self.replay_buffer_size = cfg.replay_buffer_size
+    def __init__(self, cfg, env, capacity=None):
+        self.replay_buffer_size = int(capacity if capacity is not None else cfg.replay_buffer_size)
         self.tasks = cfg.task_list
         self.env = env
         self.observations = np.zeros((self.replay_buffer_size, *self.env.observation_space.shape), dtype=np.float32)
