@@ -61,7 +61,7 @@ def train_for_hpo(cfg, trial_number: int, params: dict) -> float:
     wandb_config["sampled_hyperparameters"] = params
     run = wandb.init(
         project=cfg.logging.project,
-        entity=cfg.logging.get("wandb_entity", None),
+        entity=cfg.logging.wandb_entity,
         name=f"sac_{TASK}_hpo_trial_{trial_number}",
         config=wandb_config,
         group="sac_block_hpo",
@@ -86,7 +86,7 @@ def train_for_hpo(cfg, trial_number: int, params: dict) -> float:
         agent = bench._build_policy(vec_env, num_envs=bench.num_envs)
         rb = ReplayBuffer(cfg=cfg, env=vec_env)
 
-        learning_starts = int(cfg.get("learning_starts", 0))
+        learning_starts = int(cfg.learning_starts)
         max_episode_steps = int(vec_env.get_attr("max_path_length")[0])
 
         global_step = 0
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     best_cfg = build_cfg(best.params)
     summary = wandb.init(
         project=best_cfg.logging.project,
-        entity=best_cfg.logging.get("wandb_entity", None),
+        entity=best_cfg.logging.wandb_entity,
         name="sac_block_hpo_best",
         group="sac_block_hpo",
         job_type="summary",

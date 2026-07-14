@@ -186,6 +186,6 @@ class RND_SAC(SAC):
                         global_step / (end_time - self.start_time)
                     )
 
-        # Algorithm 1: store M_τ after the distillation loop.
+        #store M_τ after the distillation loop.
         self.store_expert_subset()
         return self.offline_policy

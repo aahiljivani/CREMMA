@@ -33,14 +33,14 @@ class ContinualBenchVecEnv:
         self.num_envs = int(cfg.num_envs)
         self.task_list = list(cfg.task_list)
         self.benchmark_mode = str(cfg.benchmark_mode)
-        self.single_task_name = cfg.get("single_task_name", None)
+        self.single_task_name = cfg.single_task_name
         self.vec_env_cls = self._resolve_vec_env_cls(cfg.vec_env_cls)
         self.train_episodes_per_task = int(cfg.train.episodes_per_task)
         self.eval_video_steps = int(cfg.eval.eval_video_steps)
         self.num_eval_episodes = int(cfg.eval.num_eval_episodes)
         self.replay_buffer_enabled = cfg.replay_buffer_enabled
         self.expert_buffer_enabled = cfg.expert_buffer_enabled
-        self.gcrl = bool(cfg.get("gcrl", False))
+        self.gcrl = bool(cfg.gcrl)
         self.target_pos = dict()
 
     @staticmethod
@@ -161,9 +161,11 @@ class ContinualBenchVecEnv:
         else:
             raise ValueError(f"Unsupported policy={self.cfg.policy}")
 
-    def record_video(self, task_name, agent, logger):
+    def record_video(self, task_name, agent, logger, key_prefix: str = "eval/video"):
         '''
-        record a video of the policy performing the task
+        Record one deterministic eval episode. Mid-training online videos keep
+        key_prefix="eval/video"; post-distillation offline videos use
+        "eval/offline_video".
         '''
         eval_env = DummyVecEnv([self._make_single_env(0, task_name, render_mode="rgb_array")])
         self._expand_observation_space(eval_env)
@@ -178,7 +180,7 @@ class ContinualBenchVecEnv:
             frames.append(eval_env.envs[0].gym_env.render())
         eval_env.close()
         if frames:
-            logger.log_video(task_name, frames)
+            logger.log_video(task_name, frames, key_prefix=key_prefix)
 
     def evaluate_task(self, task_name, agent, n_episodes):
         # rank offset keeps eval seeds disjoint from the training env seeds
@@ -204,6 +206,16 @@ class ContinualBenchVecEnv:
         # current shared policy evaluated on every task seen so far -> p_tau(w)
         return {t: self.evaluate_task(t, agent, self.num_eval_episodes) for t in seen_tasks}
 
+    def record_offline_videos(self, seen_tasks, agent, logger):
+        # One deterministic rollout per seen task for the distilled offline actor.
+        for task_name in seen_tasks:
+            self.record_video(
+                task_name,
+                agent,
+                logger,
+                key_prefix="eval/offline_video",
+            )
+
     def train(self):
         # seeding
         random.seed(self.cfg.seed)
@@ -213,20 +225,19 @@ class ContinualBenchVecEnv:
         # device
         self.cfg.device = "cuda" if torch.cuda.is_available() and self.cfg.cuda else "cpu"
         print(f"Using device: {self.cfg.device}")
-        # Only one task's envs are live at a time (avoids 6x EGL VRAM from pre-spawning all tasks).
         training_order = self._build_training_order()
         first_env = self.make_task_env(training_order[0])
         # building the policy will come from intitializing the agent first. i.e. calling SAC.reset()
         agent = self._build_policy(first_env, num_envs=self.num_envs)
         # maybe we need a buffer type?
         # random action sampling until the learning starts
-        learning_starts = int(self.cfg.get("learning_starts", 0))
+        learning_starts = int(self.cfg.learning_starts)
         if self.replay_buffer_enabled:
             rb = ReplayBuffer(cfg=self.cfg, env=first_env)
 
-        rnd_enabled = bool(self.cfg.get("rnd", False)) and self.cfg.policy == "SAC"
-        if rnd_enabled and not self.replay_buffer_enabled:
-            raise ValueError("rnd=true requires replay_buffer_enabled=true")
+        rnd_enabled = bool(self.cfg.rnd) and self.cfg.policy == "SAC"
+        if rnd_enabled and not self.replay_buffer_enabled and not self.expert_buffer_enabled:
+            raise ValueError("rnd=true requires replay_buffer_enabled=true, and expert_buffer_enabled=true")
         expert_buffer = ExpertBuffer(cfg=self.cfg, env=first_env) if rnd_enabled else None
         rnd_sac = None
 
@@ -238,7 +249,7 @@ class ContinualBenchVecEnv:
             project=self.cfg.logging.project,
             run_name=run_name,
             enable_wandb=bool(self.cfg.logging.enable_wandb),
-            entity=self.cfg.logging.get("wandb_entity", None),
+            entity=self.cfg.logging.wandb_entity,
             config=OmegaConf.to_container(self.cfg, resolve=True),
             num_envs=self.num_envs,
         )
@@ -295,9 +306,8 @@ class ContinualBenchVecEnv:
                         logger.update_online(
                             task_name=task_name,
                             task_idx=task_idx,
-                            episode_idx=ep,
-                            timestep_in_episode=t,
                             successes=successes,
+                            dones=dones,
                         )
 
                         for idx, done in enumerate(dones):
@@ -308,11 +318,6 @@ class ContinualBenchVecEnv:
                                     "charts/episodic_return": float(episode_returns[idx]),
                                     "charts/episodic_length": int(episode_lengths[idx]),
                                 }
-                            )
-                            logger.on_episode_end(
-                                task_name=task_name,
-                                success=bool(infos[idx].get("success", False)),
-                                episode_length=int(episode_lengths[idx]),
                             )
                             episode_returns[idx] = 0.0
                             episode_lengths[idx] = 0
@@ -374,9 +379,15 @@ class ContinualBenchVecEnv:
             logger.on_task_end(task_name)
             seen_tasks.append(task_name)
 
+            # After R&D, agent.actor already holds the distilled offline weights.
             per_task = self.evaluate_seen_tasks(seen_tasks, agent)
-            ap = logger.log_offline_ap(per_task)
+            ap = logger.log_offline_ap(per_task, current_task=task_name)
             print(f"[Task {task_idx}] {task_name} done. AP(w)={ap:.3f}  per-task={per_task}")
+
+            if rnd_enabled and logger.run is not None:
+                self.record_offline_videos(seen_tasks, agent, logger)
+                print(f"[Task {task_idx}] Logged offline-actor videos for {seen_tasks}")
+
             if hasattr(agent, "save"):
                 agent.save(str(save_dir))
                 print(f"[Task {task_idx}] Saved checkpoint after task {task_name}")
