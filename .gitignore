@@ -3,6 +3,7 @@ Reset-Distill/
 .vscode/
 wandb/
 data/
+models/
 *.gif
 runs/
 output*
