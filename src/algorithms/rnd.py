@@ -118,7 +118,7 @@ class RND_SAC(SAC):
             bc_loss = bc_loss + self.gaussian_kl(
                 (means, log_stds), (target_means, target_log_stds)
             ) * self.cl_reg_coef
-        return bc_loss
+        return bc_loss / len(self.seen_tasks)
 
     @staticmethod
     def gaussian_kl(dist1, dist2):

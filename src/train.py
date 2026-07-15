@@ -339,24 +339,31 @@ class ContinualBenchVecEnv:
                 if rnd_enabled:
                     target_capacity = int(self.cfg.target_replay_buffer_size)
                     rb_target = ReplayBuffer(cfg=self.cfg, env=vec_env, capacity=target_capacity)
+                    ep_successes = 0
+                    ep_count = 0
                     obs = vec_env.reset()
                     obs = self._augment_obs(task_name, obs)
                     while rb_target.size < rb_target.replay_buffer_size:
-                        actions = agent.predict(obs, deterministic=True)
+                        # Stochastic rollouts match the online expert policy (Reset & Distill).
+                        actions = agent.predict(obs, deterministic=False)
                         next_obs, rewards, dones, infos = vec_env.step(actions)
                         next_obs = self._augment_obs(task_name, next_obs)
 
                         real_next_obs = next_obs.copy()
                         for idx, done in enumerate(dones):
-                            if done:
-                                real_next_obs[idx] = self._augment_terminal_obs(
-                                    task_name, infos[idx]["terminal_observation"]
-                                )
+                            if not done:
+                                continue
+                            ep_count += 1
+                            ep_successes += int(bool(infos[idx].get("success", 0.0)))
+                            real_next_obs[idx] = self._augment_terminal_obs(
+                                task_name, infos[idx]["terminal_observation"]
+                            )
                         rb_target.add(obs, actions, rewards, dones, real_next_obs)
                         obs = next_obs
-
+                    ep_success_rate = ep_successes / max(ep_count, 1)
                     print(
-                        f"[Task {task_idx}] Collected {rb_target.size} expert transitions for RND"
+                        f"[Task {task_idx}] Collected {rb_target.size} expert transitions for RND "
+                        f"(episodic success {ep_success_rate:.3f} over {ep_count} episodes)"
                     )
 
                     if rnd_sac is None:
